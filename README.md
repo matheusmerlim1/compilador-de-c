@@ -111,17 +111,31 @@ explica o problema em português.
 Não precisa salvar antes de rodar: um arquivo sem nome é compilado a partir de
 uma cópia temporária.
 
-### O console
+### Onde o programa roda
 
-Depois do F5, a aba *Saída* vira um console de verdade: as perguntas do programa
-aparecem **na hora** e você digita a resposta ali mesmo, apertando Enter — como
-no Code::Blocks. Não precisa preparar as respostas antes.
+**Se o seu código usa `scanf`** (ou `getchar`, `fgets`…), o F5 abre a **janela
+preta do Windows**, igual ao Code::Blocks: o programa aparece lá e você digita
+as respostas na hora.
+
+**Se não lê nada**, roda dentro da própria janela, no painel *Saída* — mais
+rápido e sem abrir janela nenhuma. Nesse modo, se o programa pedir algo mesmo
+assim, a barra **Resposta** no rodapé fica ativa para você digitar.
 
 Enquanto o programa roda, o botão **Parar** fica ativo. Use quando ele travar ou
 entrar em laço infinito.
 
-A caixa *Entrada* é opcional: serve para deixar as respostas prontas, uma por
-linha, em exercícios de entrada fixa.
+### Comodidades do editor
+
+| Atalho | O que faz |
+|---|---|
+| <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> | move a linha para cima ou para baixo |
+| <kbd>Ctrl</kbd>+<kbd>C</kbd> | sem seleção, copia a linha inteira |
+| <kbd>Ctrl</kbd>+<kbd>V</kbd> | cola a linha copiada acima da atual |
+| <kbd>Ctrl</kbd>+<kbd>X</kbd> | recorta a linha inteira |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> | duplica a linha |
+
+Ao parar o cursor num `(`, `{` ou `[`, o par correspondente fica **destacado em
+azul** — ajuda a achar a chave que falta fechar.
 
 > **Detalhe técnico.** Quando a saída de um programa em C vai para outro programa
 > em vez de um terminal, a biblioteca do C guarda o texto num buffer e as

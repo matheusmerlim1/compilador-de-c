@@ -216,12 +216,23 @@ class Editor(tk.Tk):
                          ("numero", "#b5cea8")):
             self.codigo.tag_configure(tag, foreground=cor)
         self.codigo.tag_configure("linha_erro", background=DESTAQUE_ERRO)
+        self.codigo.tag_configure("par", background="#3a5a7a", foreground="white")
 
         self.codigo.bind("<KeyRelease>", self._ao_digitar)
-        self.codigo.bind("<ButtonRelease-1>", lambda e: self._posicao())
+        self.codigo.bind("<ButtonRelease-1>", lambda e: (self._posicao(),
+                                                         self._marcar_par()))
         self.codigo.bind("<MouseWheel>", self._ao_rolar_mouse)
         self.codigo.bind("<Return>", self._ao_enter)
         self.codigo.bind("<Tab>", self._ao_tab)
+        # comodidades do VS Code
+        self.codigo.bind("<Alt-Up>", lambda e: self._mover_linha(True))
+        self.codigo.bind("<Alt-Down>", lambda e: self._mover_linha(False))
+        self.codigo.bind("<Control-c>", self._copiar_linha)
+        self.codigo.bind("<Control-C>", self._copiar_linha)
+        self.codigo.bind("<Control-x>", self._recortar_linha)
+        self.codigo.bind("<Control-v>", self._colar)
+        self.codigo.bind("<Control-Shift-D>", self._duplicar_linha)
+        self.codigo.bind("<Control-Shift-d>", self._duplicar_linha)
         return quadro
 
     def _montar_paineis(self, pai):
@@ -234,19 +245,39 @@ class Editor(tk.Tk):
                         selectbackground=SELECAO)
             return t
 
-        # --- aba Saida: entrada do programa + o que ele imprimiu
+        # --- aba Saida: o que o programa imprimiu, e onde responder a ele
         aba_saida = tk.Frame(self.abas, bg=FUNDO_CLARO)
-        tk.Label(aba_saida, text="  Entrada opcional — respostas prontas, uma por linha "
-                          "(normalmente basta digitar direto no console abaixo)",
-                 bg=FUNDO_CLARO, fg=CINZA, font=self.fonte_ui,
-                 anchor="w").pack(fill=tk.X, pady=(6, 2))
-        self.entrada = tk.Text(aba_saida, bg="#2d2d30", fg=TEXTO, bd=0,
-                               highlightthickness=0, font=self.fonte, height=3,
-                               padx=10, pady=6, insertbackground="#aeafad",
-                               selectbackground=SELECAO)
-        self.entrada.pack(fill=tk.X, padx=8)
+
+        # A barra de resposta é empacotada ANTES da saída: se viesse depois, a
+        # saída (que expande) tomaria a altura toda e espremeria a barra.
+        self.barra_entrada = tk.Frame(aba_saida, bg="#2d2d30", height=44)
+        self.barra_entrada.pack(fill=tk.X, side=tk.BOTTOM)
+        self.barra_entrada.pack_propagate(False)
+
+        self.rotulo_entrada = tk.Label(
+            self.barra_entrada, text="  Resposta:", bg="#2d2d30", fg=VERDE,
+            font=tkfont.Font(family="Segoe UI", size=9, weight="bold"))
+        self.rotulo_entrada.pack(side=tk.LEFT, padx=(6, 4), pady=7)
+
+        self.entrada = tk.Entry(
+            self.barra_entrada, bg="#3c3c40", fg=TEXTO, bd=0,
+            highlightthickness=1, highlightbackground="#3c3c40",
+            highlightcolor=AZUL, font=self.fonte,
+            insertbackground="#aeafad", selectbackground=SELECAO,
+            disabledbackground="#2a2a2d", state=tk.DISABLED)
+        self.entrada.pack(side=tk.LEFT, fill=tk.X, expand=True,
+                          padx=(0, 6), pady=6, ipady=4)
+        self.entrada.bind("<Return>", self._enviar_resposta)
+
+        self.btn_enviar = tk.Button(
+            self.barra_entrada, text="Enviar", command=self._enviar_resposta,
+            bg=FUNDO_CLARO, fg=TEXTO, activebackground="#333337",
+            activeforeground="white", relief=tk.FLAT, bd=0, padx=14, pady=4,
+            font=self.fonte_ui, cursor="hand2", state=tk.DISABLED)
+        self.btn_enviar.pack(side=tk.LEFT, padx=(0, 8), pady=7)
+
         self.saida = area(aba_saida)
-        self.saida.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
+        self.saida.pack(fill=tk.BOTH, expand=True)
         for tag, cor in (("ok", VERDE), ("erro", VERMELHO),
                          ("aviso", AMARELO), ("fraco", CINZA),
                          ("programa", TEXTO), ("digitado", "#9cdcfe")):
@@ -308,12 +339,14 @@ class Editor(tk.Tk):
         if evento and evento.keysym in ("Up", "Down", "Left", "Right",
                                         "Home", "End", "Prior", "Next"):
             self._posicao()
+            self._marcar_par()
             return
         self.salvo = False
         self._atualizar_titulo()
         self._numerar()
         self._pintar()
         self._posicao()
+        self._marcar_par()
         self.codigo.tag_remove("linha_erro", "1.0", tk.END)
 
     def _ao_rolar_mouse(self, evento):
@@ -333,6 +366,120 @@ class Editor(tk.Tk):
     def _ao_tab(self, evento):
         self.codigo.insert("insert", "    ")
         return "break"
+
+    # ------------------------------------------------------------------
+    # comodidades do VS Code
+    # ------------------------------------------------------------------
+
+    def _mover_linha(self, para_cima):
+        """Alt + seta leva a linha inteira para cima ou para baixo."""
+        ini = int(self.codigo.index("insert linestart").split(".")[0])
+        fim = int(self.codigo.index("insert lineend").split(".")[0])
+        total = int(self.codigo.index("end-1c").split(".")[0])
+
+        if para_cima and ini <= 1:
+            return "break"
+        if not para_cima and fim >= total:
+            return "break"
+
+        coluna = int(self.codigo.index("insert").split(".")[1])
+        texto = self.codigo.get("%d.0" % ini, "%d.end" % fim)
+
+        self.codigo.delete("%d.0" % ini, "%d.end +1c" % fim)
+        destino = ini - 1 if para_cima else ini + 1
+        self.codigo.insert("%d.0" % destino, texto + "\n")
+
+        self.codigo.mark_set("insert", "%d.%d" % (destino, coluna))
+        self.codigo.see("insert")
+        self._ao_digitar()
+        return "break"
+
+    def _limites_da_linha(self):
+        inicio = self.codigo.index("insert linestart")
+        fim = self.codigo.index("insert lineend")
+        return inicio, fim, self.codigo.get(inicio, fim)
+
+    def _copiar_linha(self, evento=None):
+        """Ctrl+C sem nada selecionado copia a linha toda, como no VS Code."""
+        if self.codigo.tag_ranges(tk.SEL):
+            return None                      # há seleção: comportamento normal
+        _, _, texto = self._limites_da_linha()
+        self.clipboard_clear()
+        self.clipboard_append(texto + "\n")
+        self._status("linha copiada", VERDE)
+        return "break"
+
+    def _recortar_linha(self, evento=None):
+        if self.codigo.tag_ranges(tk.SEL):
+            return None
+        inicio, fim, texto = self._limites_da_linha()
+        self.clipboard_clear()
+        self.clipboard_append(texto + "\n")
+        self.codigo.delete(inicio, fim + " +1c")
+        self._ao_digitar()
+        self._status("linha recortada", VERDE)
+        return "break"
+
+    def _colar(self, evento=None):
+        """Se o que foi copiado é uma linha inteira, cola acima da linha atual."""
+        try:
+            conteudo = self.clipboard_get()
+        except tk.TclError:
+            return "break"
+        if not conteudo.endswith("\n") or self.codigo.tag_ranges(tk.SEL):
+            return None                      # deixa o Tk colar do jeito normal
+        self.codigo.insert("insert linestart", conteudo)
+        self._ao_digitar()
+        return "break"
+
+    def _duplicar_linha(self, evento=None):
+        _, fim, texto = self._limites_da_linha()
+        self.codigo.insert(fim, "\n" + texto)
+        self._ao_digitar()
+        return "break"
+
+    # --- par de parenteses ---------------------------------------------
+    ABRE = "([{"
+    FECHA = ")]}"
+    PARES = {"(": ")", "[": "]", "{": "}", ")": "(", "]": "[", "}": "{"}
+
+    def _achar_par(self, texto, pos):
+        ch = texto[pos] if 0 <= pos < len(texto) else ""
+        alvo = self.PARES.get(ch)
+        if not alvo:
+            return -1
+        passo = 1 if ch in self.ABRE else -1
+        nivel = 0
+        i = pos
+        while 0 <= i < len(texto):
+            if texto[i] == ch:
+                nivel += 1
+            elif texto[i] == alvo:
+                nivel -= 1
+                if nivel == 0:
+                    return i
+            i += passo
+        return -1
+
+    def _marcar_par(self, evento=None):
+        """Pinta o parenteses/chave sob o cursor e o seu companheiro."""
+        self.codigo.tag_remove("par", "1.0", tk.END)
+        texto = self.codigo.get("1.0", "end-1c")
+        cursor = len(self.codigo.get("1.0", "insert"))
+
+        pos = -1
+        if cursor < len(texto) and texto[cursor] in self.PARES:
+            pos = cursor
+        elif cursor > 0 and texto[cursor - 1] in self.PARES:
+            pos = cursor - 1
+        if pos == -1:
+            return
+
+        par = self._achar_par(texto, pos)
+        if par == -1:
+            return
+        for p in (pos, par):
+            self.codigo.tag_add("par", "1.0 +%dc" % p, "1.0 +%dc" % (p + 1))
 
     def _numerar(self):
         total = int(self.codigo.index("end-1c").split(".")[0])
@@ -542,8 +689,8 @@ class Editor(tk.Tk):
         self.saida.config(state=tk.NORMAL)
         self.saida.mark_set("limite", "end-1c")
         self.saida.mark_gravity("limite", tk.LEFT)
-        self.saida.focus_set()
-        self._status("rodando — digite as respostas aqui embaixo", VERDE)
+        self._liberar_barra_entrada(True)
+        self._status("rodando — digite a resposta na barra de baixo", VERDE)
         self.abas.select(0)
 
         threading.Thread(target=self._ler_saida_viva, daemon=True).start()
@@ -597,6 +744,7 @@ class Editor(tk.Tk):
         self.processo = None
         self.btn_rodar.config(state=tk.NORMAL)
         self.btn_parar.config(state=tk.DISABLED)
+        self._liberar_barra_entrada(False)
 
         self.saida.config(state=tk.NORMAL)
         if not self.saida.get("1.0", "end-1c").endswith("\n"):
@@ -619,6 +767,27 @@ class Editor(tk.Tk):
         self.foi_parado = False
         self.saida.see("end")
         self.saida.config(state=tk.DISABLED)
+
+    def _enviar_resposta(self, evento=None):
+        """Manda para o programa o que foi digitado na barra de resposta."""
+        if not self.processo:
+            return "break"
+        texto = self.entrada.get()
+        self.entrada.delete(0, tk.END)
+        self._enviar_linha(texto, ecoar=True)
+        return "break"
+
+    def _liberar_barra_entrada(self, ligada):
+        estado = tk.NORMAL if ligada else tk.DISABLED
+        self.entrada.config(state=estado)
+        self.btn_enviar.config(state=estado)
+        if ligada:
+            self.rotulo_entrada.config(
+                text="  Resposta:", fg=VERDE)
+            self.entrada.focus_set()
+        else:
+            self.rotulo_entrada.config(
+                text="  Resposta:", fg=CINZA)
 
     def _enviar_linha(self, texto, ecoar=False):
         if not self.processo:
@@ -679,12 +848,24 @@ class Editor(tk.Tk):
         return re.search(r"\b(scanf|getchar|gets|fgets|getline)\s*\(", codigo) is not None
 
     def rodar(self):
-        """Roda no console da propria janela: o programa pergunta, voce responde."""
+        """Compila e executa.
+
+        Se o programa conversa com quem esta usando (tem scanf e afins), abre
+        a janela preta do Windows, como o Code::Blocks faz: e onde a conversa
+        fica mais natural. Sem leitura de dados, roda aqui dentro mesmo, que e
+        mais rapido e nao enche a tela de janelas.
+        """
         fonte = self._preparar()
         if fonte is None:
             return
+
+        if self._le_do_teclado():
+            self.terminal_automatico = True
+            self._iniciar("terminal", fonte, "")
+            return
+
         self.terminal_automatico = False
-        self._iniciar("interativo", fonte, self.entrada.get("1.0", "end-1c"))
+        self._iniciar("interativo", fonte, "")
 
     def rodar_terminal(self):
         """Executa numa janela de terminal de verdade, para programas que
@@ -846,10 +1027,9 @@ class Editor(tk.Tk):
                 partes = []
                 if getattr(self, "terminal_automatico", False):
                     partes += [
-                        ("Seu programa pede dados a quem está usando, e a caixa "
-                         "Entrada está vazia.\n", "aviso"),
-                        ("Por isso abri o programa em uma janela de terminal, onde "
-                         "você digita na hora.\n\n", "aviso"),
+                        ("Seu programa pede dados a quem está usando.\n", "ok"),
+                        ("Ele abriu em uma janela preta, onde você digita as "
+                         "respostas na hora.\n\n", "ok"),
                     ]
                 else:
                     partes.append(
