@@ -1,0 +1,10 @@
+# O clang, o lld e o memfs sao WebAssembly sem extensao no nome. Sem isto o
+# Git poderia trata-los como texto e trocar as quebras de linha, corrompendo
+# os binarios no clone.
+docs/wasm/clang    binary
+docs/wasm/lld      binary
+docs/wasm/memfs    binary
+docs/wasm/*.tar    binary
+*.ico              binary
+*.png              binary
+*.exe              binary

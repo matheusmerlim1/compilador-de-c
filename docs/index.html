@@ -45,6 +45,10 @@
   }
   .botao-principal { background: var(--azul-forte); color: #fff; }
   .botao-principal:hover { background: #1177bb; }
+  .botao-destaque {
+    border-color: var(--verde); color: var(--verde); background: rgba(78,201,176,.08);
+  }
+  .botao-destaque:hover { background: rgba(78,201,176,.16); }
   .botao-secundario { border-color: var(--borda); color: var(--texto); }
   .botao-secundario:hover { border-color: var(--suave); }
   .nota-download { color: var(--suave); font-size: .85rem; margin-top: 14px; }
@@ -146,11 +150,19 @@
       <a class="botao botao-principal" href="https://github.com/matheusmerlim1/compilador-de-c/releases/latest/download/Compilador-de-C.exe">
         Baixar para Windows
       </a>
+      <a class="botao botao-destaque" href="online.html">
+        Programar online
+      </a>
       <a class="botao botao-secundario" href="https://github.com/matheusmerlim1/compilador-de-c">
         Ver o código no GitHub
       </a>
     </div>
-    <p class="nota-download">Windows 10/11 &middot; 64 bits &middot; ~10 MB &middot; não precisa instalar Python</p>
+    <p class="nota-download">
+      Windows 10/11 &middot; 64 bits &middot; ~10 MB &middot; não precisa instalar Python
+      <br>
+      <span style="color:var(--verde)">Sem instalar nada:</span>
+      escreva e rode C direto no navegador, e baixe o <span class="mono">.c</span> no fim.
+    </p>
   </header>
 
   <section>
@@ -214,6 +226,12 @@ or '__attribute__' before 'float'</pre>
            como <code>scanf("%s", &amp;letra)</code> numa variável <code>char</code>.</p>
       </div>
       <div class="cartao">
+        <h3>Funciona online também</h3>
+        <p>Dá para <a href="online.html" style="color:var(--verde)">escrever e rodar C
+           no navegador</a>, sem instalar nada, e baixar o <code>.c</code> no fim.
+           Compila de verdade: é o Clang em WebAssembly.</p>
+      </div>
+      <div class="cartao">
         <h3>Abre pelo botão direito</h3>
         <p>Depois de instalado, qualquer arquivo <code>.c</code> pode ser aberto
            por <em>Abrir com &rsaquo; Compilador de C</em>.</p>
@@ -238,6 +256,15 @@ or '__attribute__' before 'float'</pre>
               registra o <em>Abrir com</em> e oferece instalar o GCC se faltar.</span>
       </li>
     </ol>
+    <div class="aviso-caixa" style="border-left-color:var(--verde);background:rgba(78,201,176,.06)">
+      <strong style="color:var(--verde)">Não quer instalar nada?</strong>
+      Use a <a href="online.html" style="color:var(--verde)">versão online</a>: escreve,
+      compila e roda no próprio navegador, e baixa o <span class="mono">.c</span> no fim.
+      O compilador (~58 MB) é baixado uma vez e fica guardado. A diferença é que online
+      as entradas do <span class="mono">scanf</span> são preenchidas antes de rodar;
+      no programa para Windows você digita durante a execução.
+    </div>
+
     <div class="aviso-caixa">
       <strong>Precisa de um compilador C.</strong>
       Este programa é uma interface para o GCC — ele não substitui o compilador.
