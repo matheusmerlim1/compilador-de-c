@@ -4,6 +4,7 @@
 compilador traduzidos para português e uma dica de como corrigir cada um.**
 
 [**⬇ Baixar para Windows**](https://github.com/matheusmerlim1/compilador-de-c/releases/latest/download/Compilador-de-C.exe)
+ · [**▶ Programar online**](https://matheusmerlim1.github.io/compilador-de-c/online.html)
  · [Página do projeto](https://matheusmerlim1.github.io/compilador-de-c/)
 
 <img src="recursos/compilador.png" width="96" alt="Ícone do Compilador de C">
@@ -33,6 +34,25 @@ ERRO  linha 7
    como corrigir: O ; que falta está quase sempre no FINAL DA LINHA ANTERIOR,
                   e não na linha que o compilador apontou.
 ```
+
+---
+
+## Sem instalar nada: versão online
+
+Dá para [**escrever e rodar C direto no navegador**](https://matheusmerlim1.github.io/compilador-de-c/online.html),
+com exemplos prontos e download do `.c` no fim. Compila de verdade — é o Clang
+compilado para WebAssembly, rodando dentro da própria página; o código não vai
+para servidor nenhum.
+
+Diferenças em relação ao programa para Windows:
+
+| | Online | Windows |
+|---|---|---|
+| Instalar | nada | baixar o `.exe` |
+| Primeira abertura | baixa ~58 MB (fica em cache) | ~10 MB, uma vez |
+| Entrada do `scanf` | preenchida antes de rodar | digitada durante a execução |
+| Casos de teste (F6) | não | sim |
+| Abrir `.c` do computador | não | sim, e pelo *Abrir com* |
 
 ---
 
@@ -248,6 +268,12 @@ ccrun/
 instalador/           INSTALAR.bat e DESINSTALAR.bat
 recursos/             ícone do programa
 docs/                 a página publicada no GitHub Pages
+  index.html          a página de apresentação
+  online.html         o compilador que roda no navegador
+  online.js           editor, exemplos e download do .c
+  worker-c.js         compila e executa, fora da thread da página
+  traduzir.js         as mesmas traduções de erro, em JavaScript
+  wasm/               Clang e LLD em WebAssembly (projeto wasm-clang)
 ```
 
 ### Gerando o executável
