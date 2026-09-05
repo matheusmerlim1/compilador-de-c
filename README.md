@@ -224,6 +224,7 @@ A pasta `exercicios/` traz quatro casos, de propósito:
 | `02_media.c` | **não compila** — falta `;` e falta `&` no `scanf` |
 | `03_vetor.c` | compila mas **quebra na execução** — escreve fora do vetor |
 | `04_raiz.c` | correto, usa `math.h` |
+| `Fibonnaci.c` | exercício real de aula: soma os pares de Fibonacci, com 3 casos de teste |
 
 ---
 

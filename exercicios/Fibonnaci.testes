@@ -1,0 +1,23 @@
+# Somatorio dos numeros pares da sequencia de Fibonacci.
+# A entrada e quantos termos gerar.
+
+=== ENTRADA dez termos
+10
+=== SAIDA
+Somatorio de fibonnaci
+informe o numero: 1 2 3 5 8 13 21 34
+A soma de numeros pares é: 44
+
+=== ENTRADA oito termos
+8
+=== SAIDA
+Somatorio de fibonnaci
+informe o numero: 1 2 3 5 8 13
+A soma de numeros pares é: 10
+
+=== ENTRADA nenhum termo a calcular
+2
+=== SAIDA
+Somatorio de fibonnaci
+informe o numero:
+A soma de numeros pares é: 0
