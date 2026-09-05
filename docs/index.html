@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compilador de C</title>
+<meta name="description" content="Ambiente para escrever, compilar e testar exercícios em C, com os erros do compilador traduzidos para português.">
+<link rel="icon" href="compilador.png">
+<style>
+  :root {
+    --fundo: #1e1e1e;
+    --fundo-claro: #252526;
+    --fundo-card: #232326;
+    --borda: #33333a;
+    --texto: #d4d4d4;
+    --suave: #9a9aa0;
+    --verde: #4ec9b0;
+    --azul: #569cd6;
+    --azul-forte: #0e639c;
+    --vermelho: #f48771;
+    --amarelo: #dcdcaa;
+    --laranja: #ce9178;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--fundo);
+    color: var(--texto);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .envolucro { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+  code, pre, .mono { font-family: Consolas, "SF Mono", Menlo, monospace; }
+
+  /* ---------------------------------------------------------- topo */
+  header { text-align: center; padding: 72px 0 56px; }
+  header img { width: 96px; height: 96px; }
+  h1 { font-size: 2.6rem; margin: 20px 0 8px; letter-spacing: -0.5px; }
+  .subtitulo { color: var(--suave); font-size: 1.15rem; max-width: 620px; margin: 0 auto 36px; }
+
+  .botoes { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .botao {
+    display: inline-block; padding: 13px 26px; border-radius: 7px;
+    text-decoration: none; font-weight: 600; font-size: 1rem;
+    border: 1px solid transparent; transition: background .15s, border-color .15s;
+  }
+  .botao-principal { background: var(--azul-forte); color: #fff; }
+  .botao-principal:hover { background: #1177bb; }
+  .botao-secundario { border-color: var(--borda); color: var(--texto); }
+  .botao-secundario:hover { border-color: var(--suave); }
+  .nota-download { color: var(--suave); font-size: .85rem; margin-top: 14px; }
+
+  /* ------------------------------------------------------- seções */
+  section { padding: 40px 0; border-top: 1px solid var(--borda); }
+  h2 { font-size: 1.5rem; margin: 0 0 6px; }
+  h2 .cifra { color: var(--verde); font-family: Consolas, monospace; margin-right: 8px; }
+  .legenda { color: var(--suave); margin: 0 0 26px; }
+
+  /* -------------------------------------------- terminal ilustrado */
+  .janela {
+    background: var(--fundo-claro); border: 1px solid var(--borda);
+    border-radius: 9px; overflow: hidden; margin: 22px 0;
+  }
+  .janela-topo {
+    display: flex; align-items: center; gap: 7px;
+    padding: 11px 14px; background: #2d2d30; border-bottom: 1px solid var(--borda);
+  }
+  .bolinha { width: 11px; height: 11px; border-radius: 50%; }
+  .janela-titulo { color: var(--suave); font-size: .82rem; margin-left: 10px; }
+  .janela-corpo {
+    padding: 18px; font-family: Consolas, monospace; font-size: .87rem;
+    line-height: 1.7; white-space: pre-wrap; overflow-x: auto; margin: 0;
+  }
+  .erro { color: var(--vermelho); }
+  .aviso { color: var(--amarelo); }
+  .ok { color: var(--verde); }
+  .fraco { color: #6e7681; }
+  .dica { color: var(--verde); }
+  .txt { color: var(--laranja); }
+  .chave { color: var(--azul); }
+
+  /* -------------------------------------------------------- cartões */
+  .grade { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .cartao {
+    background: var(--fundo-card); border: 1px solid var(--borda);
+    border-radius: 9px; padding: 20px;
+  }
+  .cartao h3 { margin: 0 0 7px; font-size: 1.02rem; }
+  .cartao p { margin: 0; color: var(--suave); font-size: .93rem; }
+
+  /* --------------------------------------------------------- tabela */
+  table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: .93rem; }
+  th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--borda); }
+  th { color: var(--suave); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .5px; }
+  kbd {
+    background: #2d2d30; border: 1px solid var(--borda); border-bottom-width: 2px;
+    border-radius: 4px; padding: 2px 7px; font-family: Consolas, monospace;
+    font-size: .85rem; white-space: nowrap;
+  }
+
+  ol.passos { padding-left: 0; list-style: none; counter-reset: p; }
+  ol.passos li { counter-increment: p; position: relative; padding: 0 0 18px 46px; }
+  ol.passos li::before {
+    content: counter(p); position: absolute; left: 0; top: -1px;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--fundo-card); border: 1px solid var(--borda);
+    color: var(--verde); font-family: Consolas, monospace; font-size: .9rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+  ol.passos strong { display: block; margin-bottom: 2px; }
+  ol.passos span { color: var(--suave); font-size: .93rem; }
+
+  pre.bloco {
+    background: var(--fundo-claro); border: 1px solid var(--borda);
+    border-radius: 7px; padding: 15px 17px; overflow-x: auto; font-size: .87rem;
+  }
+  .aviso-caixa {
+    background: rgba(220,220,170,.07); border-left: 3px solid var(--amarelo);
+    padding: 14px 18px; border-radius: 0 7px 7px 0; margin: 20px 0;
+    color: var(--suave); font-size: .93rem;
+  }
+  .aviso-caixa strong { color: var(--amarelo); }
+
+  footer {
+    border-top: 1px solid var(--borda); padding: 34px 0 50px;
+    text-align: center; color: var(--suave); font-size: .88rem;
+  }
+  footer a { color: var(--azul); }
+  @media (max-width: 600px) {
+    header { padding: 48px 0 40px; }
+    h1 { font-size: 2rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="envolucro">
+
+  <header>
+    <img src="compilador.png" alt="Ícone do Compilador de C">
+    <h1>Compilador de C</h1>
+    <p class="subtitulo">
+      Escreva, compile e teste exercícios em C numa janela só — com os erros do
+      compilador <strong>traduzidos para português</strong> e uma dica de como corrigir cada um.
+    </p>
+    <div class="botoes">
+      <a class="botao botao-principal" href="https://github.com/matheusmerlim1/compilador-de-c/releases/latest/download/Compilador-de-C.exe">
+        Baixar para Windows
+      </a>
+      <a class="botao botao-secundario" href="https://github.com/matheusmerlim1/compilador-de-c">
+        Ver o código no GitHub
+      </a>
+    </div>
+    <p class="nota-download">Windows 10/11 &middot; 64 bits &middot; ~10 MB &middot; não precisa instalar Python</p>
+  </header>
+
+  <section>
+    <h2><span class="cifra">#</span>O problema</h2>
+    <p class="legenda">
+      Quem está aprendendo C trava na mensagem do compilador, não no algoritmo.
+    </p>
+    <div class="janela">
+      <div class="janela-topo">
+        <span class="bolinha" style="background:#f45b5b"></span>
+        <span class="bolinha" style="background:#f4bf4f"></span>
+        <span class="bolinha" style="background:#4ec94e"></span>
+        <span class="janela-titulo">o que o GCC responde</span>
+      </div>
+<pre class="janela-corpo"><span class="fraco">media.c:7:5:</span> <span class="erro">error:</span> expected '=', ',', ';', 'asm'
+or '__attribute__' before 'float'</pre>
+    </div>
+    <div class="janela">
+      <div class="janela-topo">
+        <span class="bolinha" style="background:#f45b5b"></span>
+        <span class="bolinha" style="background:#f4bf4f"></span>
+        <span class="bolinha" style="background:#4ec94e"></span>
+        <span class="janela-titulo">o que este programa mostra</span>
+      </div>
+<pre class="janela-corpo"><span class="erro">ERRO</span>  <strong>linha 7</strong>
+   Faltou um ponto e vírgula (;).
+   <span class="fraco">original: expected '=', ',', ';', 'asm' ...</span>
+     6 |     float n1, n2, n3
+   <strong>&gt; 7 |     float media;</strong>
+   <span class="dica">como corrigir:</span> O ; que falta está quase sempre no
+   <strong>final da linha anterior</strong>, não na linha apontada.</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="cifra">#</span>O que ele faz</h2>
+    <div class="grade">
+      <div class="cartao">
+        <h3>Traduz o erro</h3>
+        <p>Cerca de 30 erros comuns explicados em português, com a linha marcada
+           em vermelho no editor e o que fazer para corrigir.</p>
+      </div>
+      <div class="cartao">
+        <h3>Console de verdade</h3>
+        <p>O programa pergunta, você responde na hora — como no Code::Blocks.
+           Com botão para parar o que travou.</p>
+      </div>
+      <div class="cartao">
+        <h3>Confere a resposta</h3>
+        <p>Escreva os casos de teste num arquivo e ele compara a saída,
+           mostrando exatamente a linha que divergiu.</p>
+      </div>
+      <div class="cartao">
+        <h3>Explica quando quebra</h3>
+        <p>Segmentation fault, divisão por zero, laço infinito e estouro de
+           pilha viram explicações, não códigos hexadecimais.</p>
+      </div>
+      <div class="cartao">
+        <h3>Pega o que o GCC ignora</h3>
+        <p>Uma revisão própria alerta sobre armadilhas que compilam sem aviso,
+           como <code>scanf("%s", &amp;letra)</code> numa variável <code>char</code>.</p>
+      </div>
+      <div class="cartao">
+        <h3>Abre pelo botão direito</h3>
+        <p>Depois de instalado, qualquer arquivo <code>.c</code> pode ser aberto
+           por <em>Abrir com &rsaquo; Compilador de C</em>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="cifra">#</span>Como instalar</h2>
+    <ol class="passos">
+      <li>
+        <strong>Baixe o <span class="mono">Compilador-de-C.exe</span></strong>
+        <span>Pelo botão no topo da página. É um arquivo só, não precisa de Python.</span>
+      </li>
+      <li>
+        <strong>Dê dois cliques nele</strong>
+        <span>O programa abre direto. Se quiser só testar, pode parar por aqui.</span>
+      </li>
+      <li>
+        <strong>Para instalar de verdade, rode o <span class="mono">INSTALAR.bat</span></strong>
+        <span>Vem na pasta <span class="mono">instalador/</span> do repositório. Cria os atalhos,
+              registra o <em>Abrir com</em> e oferece instalar o GCC se faltar.</span>
+      </li>
+    </ol>
+    <div class="aviso-caixa">
+      <strong>Precisa de um compilador C.</strong>
+      Este programa é uma interface para o GCC — ele não substitui o compilador.
+      Se o GCC não estiver na máquina, o instalador se oferece para baixá-lo pelo
+      winget, e o próprio programa mostra o passo a passo. Instalação manual:
+      <br><br>
+      <span class="mono">winget install -e --id BrechtSanders.WinLibs.POSIX.UCRT</span>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="cifra">#</span>Atalhos</h2>
+    <table>
+      <thead>
+        <tr><th>Tecla</th><th>Botão</th><th>O que faz</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><kbd>F5</kbd></td><td>Rodar</td><td>compila e executa no console da janela</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Parar</td><td>mata o programa que está rodando</td></tr>
+        <tr><td><kbd>Shift</kbd>+<kbd>F5</kbd></td><td>Terminal</td><td>roda numa janela preta separada</td></tr>
+        <tr><td><kbd>F6</kbd></td><td>Testar</td><td>confere a saída contra os casos de teste</td></tr>
+        <tr><td><kbd>F7</kbd></td><td>Verificar</td><td>só compila e lista os erros</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Salvar</td><td>grava o arquivo <span class="mono">.c</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="cifra">#</span>Casos de teste</h2>
+    <p class="legenda">
+      Um arquivo <span class="mono">.testes</span> ao lado do exercício, e o
+      <kbd>F6</kbd> confere tudo de uma vez.
+    </p>
+<pre class="bloco">=== ENTRADA soma simples
+2 3
+=== SAIDA
+5
+
+=== ENTRADA com negativo
+-4 10
+=== SAIDA
+6</pre>
+    <div class="janela">
+      <div class="janela-topo">
+        <span class="bolinha" style="background:#f45b5b"></span>
+        <span class="bolinha" style="background:#f4bf4f"></span>
+        <span class="bolinha" style="background:#4ec94e"></span>
+        <span class="janela-titulo">resultado</span>
+      </div>
+<pre class="janela-corpo"><span class="ok">2 de 3 caso(s) passaram</span>
+
+<span class="ok">✓ soma simples</span>   <span class="fraco">(0.01s)</span>
+<span class="ok">✓ com negativo</span>   <span class="fraco">(0.01s)</span>
+<span class="erro">✗ caso que falha</span>
+   <span class="fraco">entrada: 1 1</span>
+   <span class="fraco">esperado:</span>
+      <span class="ok">7</span>
+   <span class="fraco">obtido:</span>
+      <span class="erro">2</span></pre>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="cifra">#</span>Como foi feito</h2>
+    <p class="legenda">Python 3 e Tkinter, chamando o GCC por baixo.</p>
+    <table>
+      <tbody>
+        <tr><td class="mono">ccrun/editor.py</td><td>a janela: editor, console e painéis</td></tr>
+        <tr><td class="mono">ccrun/diagnosticos.py</td><td>tradução dos erros para português</td></tr>
+        <tr><td class="mono">ccrun/compilar.py</td><td>chamada do GCC e escolha das flags</td></tr>
+        <tr><td class="mono">ccrun/executar.py</td><td>execução com limite de tempo e leitura da falha</td></tr>
+        <tr><td class="mono">ccrun/testes.py</td><td>leitura dos casos e comparação de saída</td></tr>
+        <tr><td class="mono">ccrun/sem_buffer.c</td><td>faz as perguntas aparecerem na hora no console</td></tr>
+        <tr><td class="mono">ccrun/cli.py</td><td>a mesma coisa por linha de comando</td></tr>
+      </tbody>
+    </table>
+    <p class="legenda" style="margin-top:20px">
+      Compila sempre com <span class="mono">-Wall -Wextra -Wshadow -Wformat=2</span>,
+      que pega vários erros de lógica antes do programa rodar, e já liga a
+      biblioteca matemática — então <span class="mono">sqrt</span> e
+      <span class="mono">pow</span> funcionam sem configurar nada.
+    </p>
+  </section>
+
+  <footer>
+    <p>
+      Feito por <a href="https://github.com/matheusmerlim1">Matheus Raposo</a> &middot;
+      Sistemas de Informação — CEFET
+    </p>
+    <p>
+      <a href="https://github.com/matheusmerlim1/compilador-de-c">Código-fonte</a> &middot;
+      <a href="https://github.com/matheusmerlim1/compilador-de-c/issues">Relatar um problema</a>
+    </p>
+  </footer>
+
+</div>
+</body>
+</html>

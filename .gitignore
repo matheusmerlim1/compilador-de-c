@@ -1,0 +1,24 @@
+# Executáveis gerados ao compilar os exercícios
+build/
+*.exe
+*.o
+*.obj
+
+# Empacotamento do PyInstaller
+dist/
+*.spec
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Registro de falhas do programa
+erro.log
+abertura.log
+
+# Sistema
+Thumbs.db
+.DS_Store
+
+# Guia pessoal — não vai para o GitHub
+githubGuia.md

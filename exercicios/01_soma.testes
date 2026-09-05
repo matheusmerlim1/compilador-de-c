@@ -1,0 +1,14 @@
+=== ENTRADA soma simples
+2 3
+=== SAIDA
+5
+
+=== ENTRADA com negativo
+-4 10
+=== SAIDA
+6
+
+=== ENTRADA zeros
+0 0
+=== SAIDA
+0
