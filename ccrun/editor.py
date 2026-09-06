@@ -65,6 +65,7 @@ class Editor(tk.Tk):
         self.processo = None             # programa em execucao no console
         self.foi_parado = False
         self.terminal_automatico = False
+        self.exe_no_terminal = None   # programa aberto na janela preta
         self.diags_atuais = []
 
         self.fonte = tkfont.Font(family="Consolas", size=12)
@@ -658,8 +659,19 @@ class Editor(tk.Tk):
         if self.compilador is None:
             self._avisar_sem_compilador()
             return None
+
         if self.rodando:
-            return None
+            # Apertar Rodar de novo quer dizer "roda outra vez": encerra a
+            # execução anterior em vez de recusar e deixar a pessoa presa.
+            if getattr(self, "exe_no_terminal", None) is not None:
+                self.foi_parado = True
+                self._matar_programa(self.exe_no_terminal.name)
+                self.exe_no_terminal = None
+                self.rodando = False
+                self.foi_parado = False
+            else:
+                return None      # ainda compilando: esperar terminar
+
         return self._fonte_para_compilar()
 
     # ------------------------------------------------------------------
@@ -829,15 +841,127 @@ class Editor(tk.Tk):
             return "break"
         return None
 
+    # ------------------------------------------------------------------
+    # acompanhamento do programa aberto na janela preta
+    # ------------------------------------------------------------------
+
+    def _programa_vivo(self, nome_exe):
+        """O programa ainda esta em execucao em algum lugar do Windows?"""
+        if os.name != "nt":
+            return False
+        try:
+            saida = subprocess.run(
+                ["tasklist", "/fi", "imagename eq " + nome_exe],
+                capture_output=True, text=True, timeout=8,
+                creationflags=0x08000000).stdout
+            return nome_exe.lower() in (saida or "").lower()
+        except (OSError, subprocess.SubprocessError):
+            return False
+
+    def _vigiar_programa_no_terminal(self, executavel, marca):
+        """Enquanto a janela preta estiver aberta, mantem o botao Parar ativo.
+
+        O acompanhamento é feito pelo arquivo-marca que o .bat cria e apaga.
+        O tasklist entra só como desempate, para o caso de a pessoa fechar a
+        janela no X — aí o .bat morre sem apagar a marca.
+        """
+        self.exe_no_terminal = executavel
+        self.marca_terminal = marca
+        self.rodando = True
+        self.btn_rodar.config(state=tk.DISABLED)
+        self.btn_parar.config(state=tk.NORMAL)
+
+        # O programa leva um instante para subir (start -> cmd -> .exe): antes
+        # de a marca aparecer, não dá para concluir que já terminou.
+        estado = {"comecou": False, "esperas": 0, "sem_processo": 0}
+
+        def olhar():
+            if self.exe_no_terminal is None:
+                return
+
+            existe = marca.exists()
+
+            # --- ainda subindo
+            if not estado["comecou"]:
+                if existe:
+                    estado["comecou"] = True
+                else:
+                    estado["esperas"] += 1
+                    if estado["esperas"] < 30:       # ate ~15s para aparecer
+                        self.after(500, olhar)
+                    else:
+                        self._encerrar_vigia()       # nao subiu
+                    return
+
+            # --- em execucao
+            if existe:
+                # A marca só some quando o programa acaba. Se a pessoa fechar a
+                # janela no X, o .bat morre sem apagá-la; por isso o processo
+                # também é consultado, e só depois de três respostas seguidas
+                # negativas a execução é dada por encerrada.
+                if self._programa_vivo(executavel.name):
+                    estado["sem_processo"] = 0
+                    self.after(700, olhar)
+                    return
+                estado["sem_processo"] += 1
+                if estado["sem_processo"] < 3:
+                    self.after(700, olhar)
+                    return
+
+            self._encerrar_vigia()
+
+        self.after(500, olhar)
+
+    def _encerrar_vigia(self):
+        self.exe_no_terminal = None
+        self.rodando = False
+        self.btn_rodar.config(state=tk.NORMAL)
+        self.btn_parar.config(state=tk.DISABLED)
+        if not self.foi_parado:
+            self._status("o programa da janela preta terminou", VERDE)
+        self.foi_parado = False
+
+    def _matar_programa(self, nome_exe):
+        """Encerra o programa pelo nome, esteja ele em qual janela estiver."""
+        if os.name != "nt":
+            return
+        for _ in range(4):
+            try:
+                subprocess.run(["taskkill", "/f", "/im", nome_exe],
+                               capture_output=True, timeout=8,
+                               creationflags=0x08000000)
+            except (OSError, subprocess.SubprocessError):
+                break
+            if not self._programa_vivo(nome_exe):
+                return
+            time.sleep(0.4)
+
     def parar(self):
-        """Mata o programa que estiver rodando."""
-        if not self.processo:
+        """Mata o programa que estiver rodando, aqui dentro ou na janela preta."""
+        if not self.rodando:
             return
         self.foi_parado = True
-        try:
-            self.processo.kill()
-        except OSError:
-            pass
+
+        # programa rodando na janela preta
+        alvo = getattr(self, "exe_no_terminal", None)
+        if alvo is not None:
+            self._matar_programa(alvo.name)
+            self.exe_no_terminal = None
+            self.rodando = False
+            self.btn_rodar.config(state=tk.NORMAL)
+            self.btn_parar.config(state=tk.DISABLED)
+            self._escrever(self.saida, [
+                ("\n■ programa interrompido por você\n", "aviso")], limpar=False)
+            self._status("interrompido", AMARELO)
+            self.foi_parado = False
+            return
+
+        # programa rodando no console da janela
+        if self.processo:
+            try:
+                self.processo.kill()
+            except OSError:
+                pass
 
     def _le_do_teclado(self):
         """O codigo pede dados a quem esta usando?"""
@@ -879,11 +1003,49 @@ class Editor(tk.Tk):
     def _abrir_terminal(self, executavel, cwd):
         try:
             if os.name == "nt":
-                # CREATE_NEW_CONSOLE (0x10) da uma janela de console propria ao
-                # programa; o pause segura a janela aberta no fim.
-                subprocess.Popen(
-                    '"%s" & echo. & echo [o programa terminou] & pause' % executavel,
-                    creationflags=0x00000010, cwd=str(cwd), shell=True)
+                # Precisa ser com o "start" do cmd.
+                #
+                # A janela do programa nao tem console (é feita com pythonw /
+                # PyInstaller --windowed). Nessa situacao, pedir CREATE_NEW_CONSOLE
+                # direto no Popen NAO abre janela nenhuma: o programa roda
+                # invisivel, fica preso esperando o teclado para sempre e ainda
+                # segura o .exe, impedindo a proxima compilacao. O "start" cria
+                # o console de verdade.
+                # Um .bat intermediário, em vez de encadear tudo num comando só.
+                #
+                # Duas armadilhas do Windows levaram a isto:
+                #  - com CREATE_NO_WINDOW, nenhuma janela é criada e o programa
+                #    fica preso invisível esperando o teclado;
+                #  - `cmd /c "" prog " & pause"` embaralha as aspas e abre um
+                #    cmd vazio, sem rodar nada.
+                # Com o arquivo .bat não há aspas aninhadas nem flags no caminho.
+                executavel = Path(executavel)
+                roteiro = executavel.parent / ("rodar_" + executavel.stem + ".bat")
+
+                # Arquivo-marca: existe enquanto o programa estiver rodando.
+                # É mais confiável do que ficar perguntando ao tasklist, que
+                # responde de forma instável e depende do idioma do Windows.
+                marca = executavel.parent / (executavel.stem + ".rodando")
+                try:
+                    marca.unlink()
+                except OSError:
+                    pass
+
+                roteiro.write_text(
+                    "@echo off\r\n"
+                    "title Execucao - {nome}\r\n"
+                    'cd /d "{pasta}"\r\n'
+                    'echo rodando> "{marca}"\r\n'
+                    '"{exe}"\r\n'
+                    'del "{marca}" >nul 2>&1\r\n'
+                    "echo.\r\n"
+                    "echo [o programa terminou]\r\n"
+                    "pause\r\n".format(nome=executavel.stem, pasta=cwd,
+                                       exe=executavel, marca=marca),
+                    encoding="utf-8")
+                subprocess.Popen('start "" "%s"' % roteiro,
+                                 cwd=str(cwd), shell=True)
+                self._vigiar_programa_no_terminal(executavel, marca)
             else:
                 for term in ("x-terminal-emulator", "gnome-terminal", "xterm"):
                     try:
@@ -922,6 +1084,13 @@ class Editor(tk.Tk):
         self._iniciar("testar", fonte, "", casos=casos, origem=origem)
 
     def _iniciar(self, modo, fonte, entrada, casos=None, origem=None):
+        # Uma execucao anterior ainda aberta segura o .exe e faz a compilacao
+        # falhar. Encerra antes, para nao obrigar a pessoa a cacar a janela.
+        destino_antigo = mod_compilar.caminho_saida(fonte, fonte.parent / "build")
+        if destino_antigo.exists() and self._programa_vivo(destino_antigo.name):
+            self._matar_programa(destino_antigo.name)
+        self.exe_no_terminal = None
+
         self.rodando = True
         self.btn_rodar.config(state=tk.DISABLED)
         self.codigo.tag_remove("linha_erro", "1.0", tk.END)
@@ -1039,11 +1208,12 @@ class Editor(tk.Tk):
                      "Quando o programa terminar, aperte uma tecla para fechar "
                      "aquela janela.\n\n", "fraco"))
                 partes.append(
-                    ("Se preferir que o resultado apareça aqui, escreva as respostas "
-                     "na caixa Entrada acima (uma por linha) e aperte F5 de novo.\n",
-                     "fraco"))
+                    ("Quando o programa acabar, a janela pede para apertar uma "
+                     "tecla e fecha.\n"
+                     "O botão Parar aqui em cima encerra o programa a qualquer "
+                     "momento, e apertar Rodar de novo também.\n", "fraco"))
                 self._escrever(self.saida, partes)
-                self._status("rodando no terminal — responda na janela preta", VERDE)
+                self._status("rodando na janela preta — responda por lá", VERDE)
                 self.abas.select(0)
             return
 
