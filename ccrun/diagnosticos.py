@@ -443,6 +443,44 @@ _DECL_CHAR = re.compile(r"\bchar\s+([A-Za-z_]\w*)\s*(?:=[^;,]*)?\s*[;,]")
 _DECL_VETOR = re.compile(r"\bchar\s+([A-Za-z_]\w*)\s*\[")
 _SCANF = re.compile(r"\bscanf\s*\(\s*\"([^\"]*)\"\s*,\s*([^)]*)\)")
 
+# Uma linha que é só a chamada do scanf, sem ninguém guardar ou testar o
+# retorno. "if (scanf(...))" e "r = scanf(...)" não casam aqui, de propósito.
+_SCANF_SOLTO = re.compile(r"^scanf\s*\(.*\)\s*;\s*$")
+
+_ABRE_LACO = re.compile(r"^\s*(while|for)\s*\(|^\s*do\b")
+
+
+def _linhas_em_laco(linhas):
+    """Numeros de linha que estao dentro de algum while/for/do.
+
+    Conta chaves para saber onde o laço termina. Não entende todos os casos
+    do C (um laço de uma linha só, sem chaves, não entra), mas cobre bem a
+    forma como os exercícios são escritos.
+    """
+    dentro = set()
+    pilha = []          # profundidade de chave onde cada laço começou
+    profundidade = 0
+
+    for n, bruta in enumerate(linhas, 1):
+        linha = bruta.split("//")[0]
+
+        comeca_laco = bool(_ABRE_LACO.match(linha))
+        if pilha:
+            dentro.add(n)
+
+        for ch in linha:
+            if ch == "{":
+                profundidade += 1
+                if comeca_laco and (not pilha or pilha[-1] != profundidade):
+                    pilha.append(profundidade)
+                    comeca_laco = False
+            elif ch == "}":
+                if pilha and pilha[-1] == profundidade:
+                    pilha.pop()
+                profundidade = max(0, profundidade - 1)
+
+    return dentro
+
 
 def revisar_fonte(caminho):
     """Le o .c e devolve avisos que o compilador nao emite."""
@@ -456,9 +494,43 @@ def revisar_fonte(caminho):
     vetores = set(_DECL_VETOR.findall(texto))
     chars_simples = {n for n in _DECL_CHAR.findall(texto) if n not in vetores}
 
+    dentro_de_laco = _linhas_em_laco(linhas)
+
     achados = []
     for n, linha in enumerate(linhas, 1):
         sem_comentario = linha.split("//")[0]
+
+        # scanf cujo resultado ninguem confere. Se estiver dentro de um laço,
+        # é a receita exata da repetição infinita: digitando algo que não
+        # encaixa no formato, o scanf falha, não consome o que foi digitado,
+        # e a volta seguinte tenta ler o mesmo texto de novo.
+        if _SCANF_SOLTO.match(sem_comentario.strip()):
+            if n in dentro_de_laco:
+                achados.append(Diagnostico(
+                    nivel="warning", arquivo=str(caminho), linha=n,
+                    mensagem="scanf dentro de um laco sem conferir o retorno",
+                    traducao="Este scanf esta dentro de um laco e ninguem "
+                             "confere se a leitura deu certo.",
+                    dica="Se for digitado algo fora do formato (uma letra onde "
+                         "se espera numero), o scanf falha, o texto continua na "
+                         "entrada e o laco repete para sempre. Confira o "
+                         "retorno:\n"
+                         "     if (scanf(\"%d\", &n) != 1) {\n"
+                         "         while (getchar() != '\\n');   /* limpa a entrada */\n"
+                         "         continue;\n"
+                         "     }",
+                ))
+            else:
+                achados.append(Diagnostico(
+                    nivel="warning", arquivo=str(caminho), linha=n,
+                    mensagem="scanf sem conferir o retorno",
+                    traducao="Ninguem confere se este scanf conseguiu ler o "
+                             "que pediu.",
+                    dica="Digitar algo fora do formato nao da erro em C: a "
+                         "variavel fica com o valor antigo e o programa segue "
+                         "com um dado errado. O scanf devolve quantos valores "
+                         "leu — compare com o esperado.",
+                ))
 
         for formato, args in _SCANF.findall(sem_comentario):
             nomes = [a.strip().lstrip("&").strip() for a in args.split(",")]

@@ -182,16 +182,123 @@ const ARGS_CLANG = [
   '-Wall', '-Wextra',
 ];
 
-/* Mesmo auxiliar do programa de computador (ccrun/sem_buffer.c).
+/* Mesmo arquivo de apoio do programa de computador (ccrun/apoio.c).
  *
  * Sem ele, um printf("Digite: ") sem quebra de linha ficaria preso no buffer
  * da biblioteca do C, e a pergunta só apareceria no fim — depois de a caixa
  * de entrada já ter sido mostrada, sem dizer o que o programa quer. */
-const FONTE_SEM_BUFFER = `#include <stdio.h>
+const FONTE_APOIO = `/* Arquivo de apoio, compilado junto com o exercicio.
+ *
+ * Nada aqui muda o codigo de quem esta aprendendo: sao dois ajustes feitos
+ * por fora, no momento de compilar.
+ *
+ *  1. Desliga o buffer da saida. Quando a saida de um programa em C vai para
+ *     outro programa em vez de um terminal, a biblioteca guarda o texto e so
+ *     entrega no fim — perguntas como printf("Digite: ") nao apareceriam na
+ *     hora.
+ *
+ *  2. Avisa quando o scanf nao consegue ler o que foi pedido. Digitar uma
+ *     letra onde o programa espera um numero nao da erro nenhum em C: o
+ *     scanf simplesmente devolve um numero menor, a variavel fica com o
+ *     valor antigo e o texto digitado CONTINUA na entrada. Dentro de um
+ *     laco, isso vira repeticao infinita. O aviso torna isso visivel.
+ *
+ * A interceptacao do scanf usa o --wrap do ligador: as chamadas do programa
+ * passam a cair em __wrap_scanf, que faz a leitura de verdade e confere o
+ * resultado.
+ */
+#include <stdarg.h>
+#include <stdio.h>
+
+/* ------------------------------------------------------------ 1. buffer */
+
 __attribute__((constructor))
 static void cc_desliga_buffer(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
+}
+
+/* ------------------------------------------------- 2. conferencia do scanf */
+
+/* Quantos valores o formato pede: cada % que nao seja %% nem %* */
+static int cc_quantos_valores(const char *formato) {
+    int quantidade = 0;
+    const char *p = formato;
+
+    for (; *p; p++) {
+        if (*p != '%') {
+            continue;
+        }
+        p++;
+        if (*p == '\\0') {
+            break;
+        }
+        if (*p == '%') {      /* %% e so um sinal de porcentagem */
+            continue;
+        }
+        if (*p == '*') {      /* %*d le e joga fora, nao guarda em variavel */
+            continue;
+        }
+        quantidade++;
+    }
+    return quantidade;
+}
+
+/* A leitura de verdade, com a conferencia. As duas portas de entrada abaixo
+ * chamam esta funcao:
+ *
+ *   __wrap_scanf        usada no computador, pelo --wrap do ligador
+ *   cc_scanf_conferido  usada no navegador, por uma macro — o ligador de
+ *                       WebAssembly desta versao nao conhece o --wrap
+ */
+static int cc_confere(const char *formato, va_list argumentos) {
+    int lidos = vscanf(formato, argumentos);
+    int pedidos = cc_quantos_valores(formato);
+
+    if (lidos == EOF) {
+        fflush(stdout);
+        fprintf(stderr,
+                "\\n[atencao] a entrada acabou e o programa ainda esperava "
+                "%d valor(es).\\n", pedidos);
+        fflush(stderr);
+        return lidos;
+    }
+
+    if (lidos < pedidos) {
+        fflush(stdout);
+        fprintf(stderr,
+                "\\n[atencao] o scanf pediu %d valor(es) no formato \\"%s\\", "
+                "mas conseguiu ler %d.\\n"
+                "          O que foi digitado nao encaixa nesse formato "
+                "(por exemplo, uma letra onde se espera numero).\\n"
+                "          A variavel ficou com o valor anterior, e o texto "
+                "digitado continua na entrada:\\n"
+                "          dentro de um laco, isso se repete sem parar.\\n",
+                pedidos, formato, lidos);
+        fflush(stderr);
+    }
+
+    return lidos;
+}
+
+int __wrap_scanf(const char *formato, ...) {
+    va_list argumentos;
+    int lidos;
+
+    va_start(argumentos, formato);
+    lidos = cc_confere(formato, argumentos);
+    va_end(argumentos);
+    return lidos;
+}
+
+int cc_scanf_conferido(const char *formato, ...) {
+    va_list argumentos;
+    int lidos;
+
+    va_start(argumentos, formato);
+    lidos = cc_confere(formato, argumentos);
+    va_end(argumentos);
+    return lidos;
 }
 `;
 
@@ -205,14 +312,31 @@ async function ligarObjetos(api, objetos, wasm) {
     ...objetos, '-lc', '-lc++', '-lc++abi', '-lcanvas', '-o', wasm);
 }
 
+
+/* Desvia as chamadas de scanf do exercicio para a nossa versao, que
+ * confere se a leitura deu certo.
+ *
+ * No computador isso e feito pelo --wrap do ligador, sem tocar no
+ * arquivo. Aqui nao da: o wasm-ld desta versao responde
+ * "unknown argument: --wrap". Entao a macro entra antes do codigo, e o
+ * #line logo depois devolve a numeracao original — sem isso, todo erro
+ * apareceria uma linha adiante do lugar certo.
+ */
+function comConferenciaDeScanf(codigo) {
+  const cabecalho =
+    '#define scanf(...) cc_scanf_conferido(__VA_ARGS__)' + '\n' +
+    '#line 1' + '\n';
+  return cabecalho + codigo;
+}
+
 async function compilarEExecutar(codigo, entrada) {
   const api = await prepararApi();
 
   const fonte = 'programa.c';
   const objeto = 'programa.o';
   const wasm = 'programa.wasm';
-  const fonteAux = 'sem_buffer.c';
-  const objetoAux = 'sem_buffer.o';
+  const fonteAux = 'apoio.c';
+  const objetoAux = 'apoio.o';
 
   // ---------------------------------------------------------- compilação
   avisar('estado', 'compilando');
@@ -221,8 +345,9 @@ async function compilarEExecutar(codigo, entrada) {
 
   let compilou = true;
   let compilouAuxiliar = true;
+  let falhaDoApoio = '';
   try {
-    api.memfs.addFile(fonte, codigo);
+    api.memfs.addFile(fonte, comConferenciaDeScanf(codigo));
     const clang = await api.getModule(api.clangFilename);
     await api.run(clang, 'clang', '-cc1', '-emit-obj', ...ARGS_CLANG,
                   '-O2', '-o', objeto, '-x', 'c', fonte);
@@ -239,13 +364,15 @@ async function compilarEExecutar(codigo, entrada) {
   // compila em separado, sem capturar diagnóstico dele.
   if (compilou) {
     try {
-      api.memfs.addFile(fonteAux, FONTE_SEM_BUFFER);
+      api.memfs.addFile(fonteAux, FONTE_APOIO);
       const clang = await api.getModule(api.clangFilename);
       await api.run(clang, 'clang', '-cc1', '-emit-obj', ...ARGS_CLANG,
                     '-O2', '-o', objetoAux, '-x', 'c', fonteAux);
     } catch (e) {
-      // se o auxiliar falhar, segue sem ele: o programa ainda roda
+      // Sem o apoio o programa ainda roda, so perde o aviso do scanf e a
+      // saida sem buffer. Mas o motivo fica registrado.
       compilouAuxiliar = false;
+      falhaDoApoio = (e && e.message) || String(e);
     }
   }
 
@@ -263,6 +390,9 @@ async function compilarEExecutar(codigo, entrada) {
   }
 
   capturando = false;
+  if (falhaDoApoio) {
+    avisar('progresso', 'sem o arquivo de apoio: ' + falhaDoApoio);
+  }
   avisar('diagnosticos', saidaDoCompilador);
 
   if (!compilou) {

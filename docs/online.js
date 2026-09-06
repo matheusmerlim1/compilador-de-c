@@ -178,6 +178,10 @@ const nomeArquivo = $('nomeArquivo');
 
 let worker = null;
 let rodando = false;
+let ultimaSaidaBruta = '';
+let houveErroReconhecido = false;
+// codigos de cor do terminal, que nao servem para nada na pagina
+const SEM_CORES = /\[[0-9;]*m/g;
 
 // ------------------------------------------------------------------ editor
 function numerarLinhas() {
@@ -756,6 +760,15 @@ function terminou(dados) {
 
   if (!dados) return;
   if (dados.etapa === 'compilacao') {
+    // Falhou sem nenhum erro reconhecido: sem isto a causa ficaria invisível,
+    // com a tela dizendo "compilou sem erros" e nada acontecendo.
+    if (!houveErroReconhecido && ultimaSaidaBruta.trim()) {
+      escrever(
+        '\nO compilador recusou o programa, mas a mensagem nao e ' +
+        'uma das que sabemos traduzir:\n\n', 'aviso');
+      const bruto = ultimaSaidaBruta.replace(SEM_CORES, '').trim();
+      escrever(bruto.slice(0, 1500) + '\n', 'fraco');
+    }
     mostrarEstado('não compilou', 'ruim');
   } else if (dados.ok) {
     escrever('\n✓ o programa terminou normalmente\n', 'ok');

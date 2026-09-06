@@ -208,6 +208,40 @@ function analisarSaida(bruta) {
   return diags;
 }
 
+/* Quais linhas estão dentro de um while/for/do.
+ *
+ * Conta chaves para achar o fim do laço. Não cobre todo o C (um laço de uma
+ * linha só, sem chaves, fica de fora), mas dá conta da forma como os
+ * exercícios costumam ser escritos.
+ */
+function linhasEmLaco(linhas) {
+  const dentro = new Set();
+  const pilha = [];
+  let profundidade = 0;
+
+  linhas.forEach((bruta, i) => {
+    const linha = bruta.split('//')[0];
+    let comecaLaco = /^\s*(while|for)\s*\(|^\s*do\b/.test(linha);
+
+    if (pilha.length) dentro.add(i + 1);
+
+    for (const ch of linha) {
+      if (ch === '{') {
+        profundidade++;
+        if (comecaLaco && (!pilha.length || pilha[pilha.length - 1] !== profundidade)) {
+          pilha.push(profundidade);
+          comecaLaco = false;
+        }
+      } else if (ch === '}') {
+        if (pilha.length && pilha[pilha.length - 1] === profundidade) pilha.pop();
+        profundidade = Math.max(0, profundidade - 1);
+      }
+    }
+  });
+
+  return dentro;
+}
+
 /* Revisão própria: armadilhas que o compilador aceita calado. */
 function revisarFonte(codigo) {
   const linhas = codigo.split('\n');
@@ -224,9 +258,38 @@ function revisarFonte(codigo) {
     if (!vetores.has(m[1])) charsSimples.add(m[1]);
   }
 
+  const emLaco = linhasEmLaco(linhas);
+
   const achados = [];
   linhas.forEach((linhaCrua, i) => {
     const linha = linhaCrua.split('//')[0];
+
+    // scanf que ninguém confere. Dentro de um laço é a receita da repetição
+    // infinita: digitando algo fora do formato, o scanf falha, não consome o
+    // que foi digitado, e a volta seguinte lê o mesmo texto de novo.
+    if (/^scanf\s*\(.*\)\s*;\s*$/.test(linha.trim())) {
+      if (emLaco.has(i + 1)) {
+        achados.push({
+          nivel: 'warning', linha: i + 1, coluna: 0, notas: [],
+          mensagem: 'scanf dentro de um laço sem conferir o retorno',
+          traducao: 'Este scanf está dentro de um laço e ninguém confere se a ' +
+                    'leitura deu certo.',
+          dica: 'Se for digitado algo fora do formato (uma letra onde se espera ' +
+                'número), o scanf falha, o texto continua na entrada e o laço ' +
+                'repete para sempre. Confira o retorno: ' +
+                'if (scanf("%d", &n) != 1) { while (getchar() != \'\\n\'); continue; }',
+        });
+      } else {
+        achados.push({
+          nivel: 'warning', linha: i + 1, coluna: 0, notas: [],
+          mensagem: 'scanf sem conferir o retorno',
+          traducao: 'Ninguém confere se este scanf conseguiu ler o que pediu.',
+          dica: 'Digitar algo fora do formato não dá erro em C: a variável fica ' +
+                'com o valor antigo e o programa segue com um dado errado. ' +
+                'O scanf devolve quantos valores leu — compare com o esperado.',
+        });
+      }
+    }
     const scanf = /\bscanf\s*\(\s*"([^"]*)"\s*,\s*([^)]*)\)/g;
     let s;
     while ((s = scanf.exec(linha)) !== null) {

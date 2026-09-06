@@ -137,11 +137,43 @@ entrar em laço infinito.
 Ao parar o cursor num `(`, `{` ou `[`, o par correspondente fica **destacado em
 azul** — ajuda a achar a chave que falta fechar.
 
-> **Detalhe técnico.** Quando a saída de um programa em C vai para outro programa
-> em vez de um terminal, a biblioteca do C guarda o texto num buffer e as
-> perguntas só apareceriam no fim. Para evitar isso, o compilador junta ao seu
-> exercício o arquivo [`ccrun/sem_buffer.c`](ccrun/sem_buffer.c), que desliga
-> esse buffer antes do `main` começar. Seu código não muda em nada.
+### Quando o `scanf` nao consegue ler
+
+Digitar uma letra onde o programa espera um número **não dá erro em C**. O
+`scanf` devolve um número menor, a variável fica com o valor antigo, e o texto
+digitado *continua na entrada* — dentro de um laço, isso repete para sempre.
+
+A ferramenta torna isso visível de duas formas:
+
+**Ao compilar**, avisa sobre `scanf` cujo retorno ninguém confere, e destaca
+quando ele está dentro de um laço.
+
+**Ao rodar**, se a leitura falhar:
+
+```
+[atencao] o scanf pediu 1 valor(es) no formato "%d", mas conseguiu ler 0.
+          O que foi digitado nao encaixa nesse formato.
+          A variavel ficou com o valor anterior, e o texto digitado
+          continua na entrada: dentro de um laco, isso se repete sem parar.
+```
+
+A forma certa de tratar:
+
+```c
+if (scanf("%d", &n) != 1) {
+    while (getchar() != '
+');   /* limpa a entrada */
+    printf("Isso nao e um numero.
+");
+}
+```
+
+> **Detalhe técnico.** O arquivo [`ccrun/apoio.c`](ccrun/apoio.c) é compilado
+> junto com o seu exercício e faz duas coisas: desliga o buffer da saída (senão
+> um `printf("Digite: ")` sem quebra de linha só apareceria no fim) e confere
+> cada `scanf`. No computador as chamadas são desviadas pelo `--wrap` do
+> ligador; no navegador, por uma macro, porque o ligador de WebAssembly dessa
+> versão não conhece o `--wrap`. Seu código não muda em nada.
 
 **Terminal (Shift+F5)** faz o mesmo numa janela preta separada do Windows.
 Se deixar essa janela aberta e apertar F5, a compilação falha — o Windows trava

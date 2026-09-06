@@ -66,18 +66,25 @@ def montar_comando(compilador, fontes, destino, otimizar=False, sanitizar=False,
     return cmd + list(extras or [])
 
 
-AUXILIAR_SEM_BUFFER = Path(__file__).resolve().parent / "sem_buffer.c"
+AUXILIAR = Path(__file__).resolve().parent / "apoio.c"
+
+# Faz as chamadas de scanf do exercicio caírem no nosso __wrap_scanf, que
+# confere se a leitura deu certo. Sem isto, digitar letra onde se espera
+# numero não avisa nada.
+LIGACAO_APOIO = ["-Wl,--wrap=scanf"]
 
 
 def compilar(compilador, fontes, destino, otimizar=False, sanitizar=False,
-             extras=None, timeout=90, interativo=False):
+             extras=None, timeout=90, apoio=True):
     """Compila e devolve o resultado ja com os diagnosticos analisados.
 
-    Com interativo=True, junta um arquivo auxiliar que desliga o buffer da
-    saida, para as perguntas do programa aparecerem na hora no console."""
+    Com apoio=True (o normal), junta o arquivo ccrun/apoio.c, que desliga o
+    buffer da saida e avisa quando um scanf nao consegue ler o que pediu."""
     fontes = list(fontes)
-    if interativo and compilador.familia == "gcc" and AUXILIAR_SEM_BUFFER.is_file():
-        fontes = fontes + [AUXILIAR_SEM_BUFFER]
+    com_apoio = apoio and compilador.familia == "gcc" and AUXILIAR.is_file()
+    if com_apoio:
+        fontes = fontes + [AUXILIAR]
+        extras = list(extras or []) + LIGACAO_APOIO
     destino.parent.mkdir(parents=True, exist_ok=True)
     if destino.exists():
         try:
@@ -137,7 +144,7 @@ def compilar(compilador, fontes, destino, otimizar=False, sanitizar=False,
     # Junta a nossa revisao do fonte: armadilhas que o compilador aceita calado.
     # O auxiliar interno fica de fora, e codigo nosso.
     for fonte in fontes:
-        if Path(fonte) != AUXILIAR_SEM_BUFFER:
+        if Path(fonte) != AUXILIAR:
             diags.extend(diagnosticos.revisar_fonte(fonte))
     sucesso = proc.returncode == 0 and destino.exists()
     return ResultadoCompilacao(sucesso, destino if sucesso else None, diags, bruta, cmd)

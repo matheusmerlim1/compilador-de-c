@@ -1112,9 +1112,8 @@ class Editor(tk.Tk):
             destino = mod_compilar.caminho_saida(fonte, fonte.parent / "build")
             comp = mod_compilar.compilar(
                 self.compilador, [fonte], destino,
-                # nos dois modos que conversam com o usuario, a saida precisa
-                # sair sem buffer, senao as perguntas nao aparecem na hora
-                interativo=modo in ("interativo", "terminal"))
+                # o apoio (sem buffer + conferencia do scanf) vale sempre
+                apoio=True)
             if not comp.sucesso or modo == "verificar":
                 self.fila.put(("compilacao", modo, comp, fonte, None))
                 return
