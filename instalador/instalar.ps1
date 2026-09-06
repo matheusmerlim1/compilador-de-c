@@ -74,9 +74,12 @@ Passo "Criando atalhos"
 $shell = New-Object -ComObject WScript.Shell
 
 function NovoAtalho($caminho, $alvo, $args, $icone, $descricao, $pastaTrabalho) {
+    # CreateShortcut abre o atalho que ja existir, entao os campos precisam ser
+    # todos reescritos. Sem limpar Arguments, um atalho de uma versao anterior
+    # continuaria mandando parametros antigos para o programa novo.
     $lnk = $shell.CreateShortcut($caminho)
     $lnk.TargetPath = $alvo
-    if ($args) { $lnk.Arguments = $args }
+    $lnk.Arguments = if ($args) { $args } else { "" }
     $lnk.IconLocation = "$icone,0"
     $lnk.Description = $descricao
     $lnk.WorkingDirectory = $pastaTrabalho

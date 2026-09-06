@@ -1040,8 +1040,12 @@ class Editor(tk.Tk):
                     'del "{marca}" >nul 2>&1\r\n'
                     "echo.\r\n"
                     "echo [o programa terminou]\r\n"
-                    "pause\r\n".format(nome=executavel.stem, pasta=cwd,
-                                       exe=executavel, marca=marca),
+                    "pause\r\n"
+                    # Sem o exit, a janela continua aberta depois do "pressione
+                    # qualquer tecla" — medido: o cmd aberto pelo start não
+                    # fecha sozinho ao fim do .bat.
+                    "exit\r\n".format(nome=executavel.stem, pasta=cwd,
+                                      exe=executavel, marca=marca),
                     encoding="utf-8")
                 subprocess.Popen('start "" "%s"' % roteiro,
                                  cwd=str(cwd), shell=True)
