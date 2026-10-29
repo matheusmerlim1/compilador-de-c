@@ -77,7 +77,7 @@
   .erro { color: var(--vermelho); }
   .aviso { color: var(--amarelo); }
   .ok { color: var(--verde); }
-  .fraco { color: #6e7681; }
+  .fraco { color: #878e97; }   /* 4,6:1 sobre a janela (#252526); o anterior dava 3,3 */
   .dica { color: var(--verde); }
   .txt { color: var(--laranja); }
   .chave { color: var(--azul); }
@@ -133,6 +133,14 @@
     text-align: center; color: var(--suave); font-size: .88rem;
   }
   footer a { color: var(--azul); }
+
+  /* foco visível pelo teclado: azul a 5,6:1 sobre o fundo */
+  a:focus-visible { outline: 2px solid var(--azul); outline-offset: 3px; border-radius: 3px; }
+  .botao:focus-visible { border-radius: 7px; }
+  @media (prefers-reduced-motion: reduce) {
+    .botao, #mr-portfolio-btn { transition: none !important; }
+    #mr-portfolio-btn:hover { transform: none !important; }
+  }
   @media (max-width: 600px) {
     header { padding: 48px 0 40px; }
     h1 { font-size: 2rem; }
@@ -169,6 +177,7 @@
     </p>
   </header>
 
+  <main>
   <section>
     <h2><span class="cifra">#</span>O problema</h2>
     <p class="legenda">
@@ -176,9 +185,9 @@
     </p>
     <div class="janela">
       <div class="janela-topo">
-        <span class="bolinha" style="background:#f45b5b"></span>
-        <span class="bolinha" style="background:#f4bf4f"></span>
-        <span class="bolinha" style="background:#4ec94e"></span>
+        <span class="bolinha" style="background:#f45b5b" aria-hidden="true"></span>
+        <span class="bolinha" style="background:#f4bf4f" aria-hidden="true"></span>
+        <span class="bolinha" style="background:#4ec94e" aria-hidden="true"></span>
         <span class="janela-titulo">o que o GCC responde</span>
       </div>
 <pre class="janela-corpo"><span class="fraco">media.c:7:5:</span> <span class="erro">error:</span> expected '=', ',', ';', 'asm'
@@ -186,9 +195,9 @@ or '__attribute__' before 'float'</pre>
     </div>
     <div class="janela">
       <div class="janela-topo">
-        <span class="bolinha" style="background:#f45b5b"></span>
-        <span class="bolinha" style="background:#f4bf4f"></span>
-        <span class="bolinha" style="background:#4ec94e"></span>
+        <span class="bolinha" style="background:#f45b5b" aria-hidden="true"></span>
+        <span class="bolinha" style="background:#f4bf4f" aria-hidden="true"></span>
+        <span class="bolinha" style="background:#4ec94e" aria-hidden="true"></span>
         <span class="janela-titulo">o que este programa mostra</span>
       </div>
 <pre class="janela-corpo"><span class="erro">ERRO</span>  <strong>linha 7</strong>
@@ -313,9 +322,9 @@ or '__attribute__' before 'float'</pre>
 6</pre>
     <div class="janela">
       <div class="janela-topo">
-        <span class="bolinha" style="background:#f45b5b"></span>
-        <span class="bolinha" style="background:#f4bf4f"></span>
-        <span class="bolinha" style="background:#4ec94e"></span>
+        <span class="bolinha" style="background:#f45b5b" aria-hidden="true"></span>
+        <span class="bolinha" style="background:#f4bf4f" aria-hidden="true"></span>
+        <span class="bolinha" style="background:#4ec94e" aria-hidden="true"></span>
         <span class="janela-titulo">resultado</span>
       </div>
 <pre class="janela-corpo"><span class="ok">2 de 3 caso(s) passaram</span>
@@ -352,6 +361,7 @@ or '__attribute__' before 'float'</pre>
       <span class="mono">pow</span> funcionam sem configurar nada.
     </p>
   </section>
+  </main>
 
   <footer>
     <p>
@@ -366,14 +376,16 @@ or '__attribute__' before 'float'</pre>
 
 </div>
 <!-- === Botao de volta ao portfolio - cole antes de </body> === -->
+<nav aria-label="Portf&oacute;lio">
 <a id="mr-portfolio-btn" href="https://matheusmerlim1.github.io/" target="_blank" rel="noopener"
-   aria-label="Abrir o portf&oacute;lio de Matheus Raposo" title="Ver todos os meus projetos">
+   aria-label="Portf&oacute;lio de Matheus Raposo (abre em nova aba)" title="Ver todos os meus projetos">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
        stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>
   </svg>
   <span>Portf&oacute;lio</span>
 </a>
+</nav>
 <style>
 #mr-portfolio-btn {
   position: fixed; top: 12px; right: 12px; z-index: 2147483000;
