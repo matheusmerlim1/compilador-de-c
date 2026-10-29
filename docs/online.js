@@ -397,7 +397,36 @@ editor.addEventListener('paste', (e) => {
   marcarPar();
 });
 
+/* ------------------------------------------------------------------------
+ * Sair do editor pelo teclado (WCAG 2.1.2, sem armadilha de teclado).
+ *
+ * O Tab aqui insere espaços, então sozinho ele nunca levaria o foco adiante.
+ * Esc arma a saída: o Tab seguinte (ou Shift+Tab) move o foco normalmente.
+ * Ctrl+M deixa o Tab sempre movendo o foco, até apertar Ctrl+M de novo.
+ * --------------------------------------------------------------------- */
+let tabSempreSai = false;
+let tabSaiUmaVez = false;
+editor.addEventListener('blur', () => { tabSaiUmaVez = false; });
+
 editor.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    tabSaiUmaVez = true;
+    if (!rodando) mostrarEstado('Esc: o próximo Tab sai do editor', '');
+    return;                       // o Esc ainda chega ao document (parar programa)
+  }
+  if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 'm' || e.key === 'M')) {
+    e.preventDefault();
+    tabSempreSai = !tabSempreSai;
+    mostrarEstado(tabSempreSai ? 'Tab agora move o foco (Ctrl+M volta a inserir espaços)'
+                               : 'Tab volta a inserir espaços no editor', '');
+    return;
+  }
+  if (e.key === 'Tab' && (tabSempreSai || tabSaiUmaVez)) {
+    tabSaiUmaVez = false;
+    return;                       // deixa o navegador mover o foco
+  }
+  if (e.key !== 'Shift') tabSaiUmaVez = false;
+
   // Alt + seta move a linha
   if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
     e.preventDefault();
@@ -473,21 +502,31 @@ function guardarAbaAtual() {
 }
 
 function desenharAbas() {
+  // redesenhar apaga os botões; se o foco estava numa aba, ele volta para a
+  // aba ativa em vez de cair no <body>
+  const tinhaFoco = listaAbas.contains(document.activeElement);
   listaAbas.innerHTML = '';
   for (const arq of arquivos) {
+    const ativa = arq.id === abaAtiva;
     const aba = document.createElement('div');
-    aba.className = 'aba' + (arq.id === abaAtiva ? ' ativa' : '') +
+    aba.className = 'aba' + (ativa ? ' ativa' : '') +
                     (arq.salvo ? '' : ' suja');
     aba.title = arq.nome;
 
-    const nome = document.createElement('span');
+    // o nome é um botão, para a aba ser escolhida pelo teclado
+    const nome = document.createElement('button');
+    nome.type = 'button';
     nome.className = 'nome';
     nome.textContent = arq.nome;
+    if (ativa) nome.setAttribute('aria-current', 'true');
+    if (!arq.salvo) nome.setAttribute('aria-description', 'alterações não baixadas');
     aba.appendChild(nome);
 
     const fechar = document.createElement('button');
+    fechar.type = 'button';
     fechar.className = 'fechar';
     fechar.title = 'Fechar';
+    fechar.setAttribute('aria-label', 'Fechar ' + arq.nome);
     fechar.addEventListener('click', (e) => {
       e.stopPropagation();
       fecharAba(arq.id);
@@ -496,6 +535,10 @@ function desenharAbas() {
 
     aba.addEventListener('click', () => trocarPara(arq.id));
     listaAbas.appendChild(aba);
+  }
+  if (tinhaFoco) {
+    const alvo = listaAbas.querySelector('.aba.ativa .nome');
+    if (alvo) alvo.focus();
   }
 }
 
@@ -663,17 +706,35 @@ let memoriaEntrada = null;   // SharedArrayBuffer combinado com o worker
 
 function caixaAberta() { return fundoCaixa.classList.contains('aberta'); }
 
+/* Enquanto a caixa está aberta, o resto da página fica inerte: o Tab não
+   escapa para trás do fundo escuro e o leitor de tela só lê a caixa. */
+const atrasDaCaixa = () => document.querySelectorAll(
+  'body > header, body > main, body > footer, body > nav, body > .pular');
+let focoAntesDaCaixa = null;
+
+function fecharCaixa() {
+  if (!caixaAberta()) return;
+  fundoCaixa.classList.remove('aberta');
+  atrasDaCaixa().forEach((el) => { el.inert = false; });
+  const volta = focoAntesDaCaixa && document.contains(focoAntesDaCaixa)
+    ? focoAntesDaCaixa : editor;
+  focoAntesDaCaixa = null;
+  volta.focus();
+}
+
 function abrirCaixa(pergunta) {
   caixaPergunta.textContent = pergunta || 'Digite um valor:';
   caixaValor.value = '';
+  if (!caixaAberta()) focoAntesDaCaixa = document.activeElement;
   fundoCaixa.classList.add('aberta');
+  atrasDaCaixa().forEach((el) => { el.inert = true; });
   mostrarEstado('esperando você digitar', 'esperando');
   setTimeout(() => caixaValor.focus(), 30);
 }
 
 function responderCaixa(texto) {
   if (!memoriaEntrada) return;
-  fundoCaixa.classList.remove('aberta');
+  fecharCaixa();
 
   const controle = new Int32Array(memoriaEntrada, 0, 2);
   const dados = new Uint8Array(memoriaEntrada, 8);
@@ -756,7 +817,7 @@ function terminou(dados) {
   rodando = false;
   btnRodar.disabled = false;
   btnParar.disabled = true;
-  fundoCaixa.classList.remove('aberta');
+  fecharCaixa();
 
   if (!dados) return;
   if (dados.etapa === 'compilacao') {
@@ -808,7 +869,7 @@ function parar() {
   // O worker pode estar parado dentro de Atomics.wait; encerrar é o único
   // jeito garantido de interromper.
   if (worker) { worker.terminate(); worker = null; }
-  fundoCaixa.classList.remove('aberta');
+  fecharCaixa();
   escrever('\n■ interrompido por você\n', 'aviso');
   rodando = false;
   btnRodar.disabled = false;
@@ -845,18 +906,43 @@ $('baixar').addEventListener('click', () => {
   const painelSaida = $('painelSaida');
   let arrastando = false;
 
-  const mover = (y) => {
+  let moveu = false;              // distingue arrasto de clique simples
+
+  const limites = () => {
     const area = document.querySelector('main').getBoundingClientRect();
+    return { area, min: 90, max: Math.max(90, area.height - 120) };
+  };
+  const alturaAtual = () => painelSaida.getBoundingClientRect().height;
+
+  // o separador informa ao leitor de tela quanto da área a saída ocupa (0-100)
+  const anunciar = () => {
+    const { min, max } = limites();
+    const pct = max > min ? Math.round((alturaAtual() - min) / (max - min) * 100) : 0;
+    divisor.setAttribute('aria-valuemin', '0');
+    divisor.setAttribute('aria-valuemax', '100');
+    divisor.setAttribute('aria-valuenow', String(Math.max(0, Math.min(100, pct))));
+    divisor.setAttribute('aria-valuetext', 'saída com ' + Math.round(alturaAtual()) + ' pixels');
+  };
+
+  const definirAltura = (altura) => {
+    const { min, max } = limites();
+    painelSaida.style.flexBasis = Math.max(min, Math.min(altura, max)) + 'px';
+    anunciar();
+  };
+
+  const mover = (y) => {
     // altura da saída = distância do ponteiro até o fim da área
-    const altura = Math.max(90, Math.min(area.bottom - y, area.height - 120));
-    painelSaida.style.flexBasis = altura + 'px';
+    definirAltura(limites().area.bottom - y);
+    moveu = true;
   };
 
   divisor.addEventListener('mousedown', (e) => {
     arrastando = true;
+    moveu = false;
     divisor.classList.add('arrastando');
     document.body.style.userSelect = 'none';
     e.preventDefault();
+    divisor.focus();
   });
   window.addEventListener('mousemove', (e) => { if (arrastando) mover(e.clientY); });
   window.addEventListener('mouseup', () => {
@@ -865,11 +951,41 @@ $('baixar').addEventListener('click', () => {
     document.body.style.userSelect = '';
   });
 
-  divisor.addEventListener('touchstart', (e) => { arrastando = true; e.preventDefault(); });
+  /* Alternativa ao arrasto com um só toque/clique (WCAG 2.5.7): cada clique
+     sem arrastar alterna a saída entre o tamanho padrão e metade da área. */
+  divisor.addEventListener('click', () => {
+    if (moveu) { moveu = false; return; }
+    const { area } = limites();
+    const metade = area.height / 2;
+    definirAltura(alturaAtual() < metade - 10 ? metade : 240);
+  });
+
+  // setas mudam a altura em 20px (PageUp/PageDown em 80px); Home/End vão aos limites
+  divisor.addEventListener('keydown', (e) => {
+    const { min, max } = limites();
+    const passos = { ArrowUp: 20, ArrowDown: -20, PageUp: 80, PageDown: -80 };
+    if (e.key in passos) definirAltura(alturaAtual() + passos[e.key]);
+    else if (e.key === 'Home') definirAltura(max);
+    else if (e.key === 'End') definirAltura(min);
+    else if (e.key === 'Enter' || e.key === ' ') divisor.click();
+    else return;
+    e.preventDefault();
+  });
+
+  divisor.addEventListener('touchstart', (e) => {
+    arrastando = true; moveu = false; e.preventDefault();
+  });
   window.addEventListener('touchmove', (e) => {
     if (arrastando && e.touches[0]) mover(e.touches[0].clientY);
   });
-  window.addEventListener('touchend', () => { arrastando = false; });
+  window.addEventListener('touchend', () => {
+    // toque sem arrastar vale como clique (o preventDefault do touchstart o cancela)
+    if (arrastando && !moveu) divisor.click();
+    arrastando = false;
+  });
+
+  window.addEventListener('resize', anunciar);
+  anunciar();
 })();
 
 // ------------------------------------------------------------------ início
