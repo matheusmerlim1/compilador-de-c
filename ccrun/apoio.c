@@ -1,7 +1,7 @@
 /* Arquivo de apoio, compilado junto com o exercicio.
  *
- * Nada aqui muda o codigo de quem esta aprendendo: sao dois ajustes feitos
- * por fora, no momento de compilar.
+ * Nada aqui muda o codigo de quem esta aprendendo: sao ajustes feitos
+ * por fora, no momento de compilar (o 3, rand_r, so vale no Windows).
  *
  *  1. Desliga o buffer da saida. Quando a saida de um programa em C vai para
  *     outro programa em vez de um terminal, a biblioteca guarda o texto e so
@@ -111,3 +111,19 @@ int cc_scanf_conferido(const char *formato, ...) {
     va_end(argumentos);
     return lidos;
 }
+
+/* ------------------------------------------- 3. rand_r no Windows */
+
+/* rand_r e o rand() que cada thread pode chamar com a sua propria semente,
+ * usado nos exemplos de OpenMP (Monte Carlo). Existe no Linux, nao no
+ * Windows. A declaracao vem de compat_posix.h. "weak": uma versao escrita
+ * no proprio exercicio tem preferencia. */
+#ifdef _WIN32
+#include <stdlib.h>
+
+__attribute__((weak))
+int rand_r(unsigned int *semente) {
+    *semente = *semente * 1103515245u + 12345u;
+    return (int)((*semente / 65536u) % ((unsigned int)RAND_MAX + 1u));
+}
+#endif

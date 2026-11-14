@@ -139,6 +139,12 @@ _REGRAS = [
      "A funcao '{f}' foi declarada de duas formas diferentes.",
      "O prototipo e a definicao precisam ter o mesmo tipo de retorno e os mesmos parametros."),
 
+    (r"ignoring ['\"]#pragma omp",
+     "Este #pragma omp foi ignorado: o programa vai rodar com uma thread so.",
+     "O compilador nao ligou o OpenMP. Esta ferramenta liga o -fopenmp sozinha "
+     "quando o codigo usa OpenMP; se apareceu este aviso, o compilador instalado "
+     "nao tem suporte. Use o GCC do WinLibs."),
+
     (r"redefinition of ['\"](?P<v>\w+)['\"]",
      "'{v}' foi definido mais de uma vez.",
      "Remova a declaracao duplicada."),
@@ -207,6 +213,29 @@ _INCLUDES = {
     "time": "time.h", "clock": "time.h", "difftime": "time.h",
     "bool": "stdbool.h", "true": "stdbool.h", "false": "stdbool.h",
     "INT_MAX": "limits.h", "INT_MIN": "limits.h",
+    "omp_get_thread_num": "omp.h", "omp_get_num_threads": "omp.h",
+    "omp_get_max_threads": "omp.h", "omp_set_num_threads": "omp.h",
+    "omp_get_num_procs": "omp.h", "omp_get_wtime": "omp.h",
+    "omp_in_parallel": "omp.h", "omp_init_lock": "omp.h", "omp_set_lock": "omp.h",
+    "omp_unset_lock": "omp.h", "omp_destroy_lock": "omp.h",
+}
+
+# Funcoes do Linux (POSIX) que a biblioteca C do Windows nao tem.
+# Aparecem muito nos exemplos de Programacao Paralela.
+_FUNCOES_SO_LINUX = {
+    "rand_r": "rand_r e do Linux. No Windows, cada thread pode ter o seu proprio "
+              "gerador; o jeito mais simples e escrever um pequeno:\n"
+              "     unsigned int meu_rand(unsigned int *semente) {\n"
+              "         *semente = *semente * 1103515245u + 12345u;\n"
+              "         return (*semente / 65536u) % 32768u;\n"
+              "     }\n"
+              "  e dividir por 32767.0 em vez de RAND_MAX.",
+    "drand48": "drand48 e do Linux. Use (double)rand() / RAND_MAX.",
+    "srand48": "srand48 e do Linux. Use srand(semente).",
+    "random": "random e do Linux. Use rand().",
+    "srandom": "srandom e do Linux. Use srand(semente).",
+    "usleep": "usleep e do Linux. No Windows use Sleep(milissegundos) "
+              "com #include <windows.h>.",
 }
 
 
@@ -303,6 +332,12 @@ def _dica_include(diag):
          or re.search(r"['\"](\w+)['\"] undeclared", diag.mensagem))
     if not m:
         return
+    so_linux = _FUNCOES_SO_LINUX.get(m.group(1))
+    if so_linux:
+        diag.traducao = ("A funcao '" + m.group(1) + "' nao existe na biblioteca "
+                         "C do Windows.")
+        diag.dica = so_linux
+        return
     header = _INCLUDES.get(m.group(1))
     if header:
         diag.dica = "Adicione no topo do arquivo:  #include <" + header + ">"
@@ -357,6 +392,15 @@ def analisar_saida(saida, familia="gcc"):
             if simbolo in ("main", "WinMain"):
                 d.traducao = "O programa nao tem a funcao main."
                 d.dica = "Todo programa em C precisa de:  int main(void) { ... return 0; }"
+            elif simbolo.startswith(("omp_", "GOMP_")):
+                d.traducao = ("A funcao do OpenMP '" + simbolo +
+                              "' nao foi encontrada na hora de ligar o programa.")
+                d.dica = ("Falta ligar o OpenMP (-fopenmp). Esta ferramenta liga sozinha "
+                          "quando ve #pragma omp ou #include <omp.h> no codigo.")
+            elif _FUNCOES_SO_LINUX.get(simbolo):
+                d.traducao = ("A funcao '" + simbolo + "' nao existe na biblioteca "
+                              "C do Windows.")
+                d.dica = _FUNCOES_SO_LINUX[simbolo]
             elif _INCLUDES.get(simbolo) == "math.h":
                 d.traducao = ("A funcao matematica '" + simbolo +
                               "' nao foi encontrada na hora de ligar o programa.")

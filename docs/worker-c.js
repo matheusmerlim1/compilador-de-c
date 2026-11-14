@@ -10,6 +10,35 @@
 
 self.importScripts('wasm/shared.js');
 
+/* Relógio para o programa compilado.
+ *
+ * O shared.js do wasm-clang deixa clock_time_get sem implementar: qualquer
+ * clock(), time() ou omp_get_wtime() derrubava o programa com "not
+ * implemented". Aqui ele responde com o relógio do navegador, em
+ * nanossegundos.
+ *
+ * O shared.js continua sem modificação: a classe App fica escondida dentro
+ * dele, então a troca é feita na hora em que ele instancia o WebAssembly. */
+const instanciarOriginal = WebAssembly.instantiate.bind(WebAssembly);
+WebAssembly.instantiate = function (modulo, importacoes) {
+  const wasi = importacoes && importacoes.wasi_unstable;
+  if (!wasi) return instanciarOriginal(modulo, importacoes);
+
+  let memoria = null;
+  wasi.clock_time_get = (idRelogio, precisao, saida) => {
+    const REALTIME = 0;
+    const ms = idRelogio === REALTIME ? Date.now() : performance.now();
+    const ns = BigInt(Math.round(ms * 1e6));
+    new DataView(memoria.buffer).setBigUint64(saida, ns, true);
+    return 0;   // ESUCCESS
+  };
+  return instanciarOriginal(modulo, importacoes).then((resultado) => {
+    const instancia = resultado.instance || resultado;
+    memoria = instancia.exports.memory;
+    return resultado;
+  });
+};
+
 let api = null;
 let saidaDoCompilador = '';   // guardada à parte, para ser traduzida
 let capturando = false;
@@ -167,6 +196,7 @@ async function prepararApi() {
   api = new API(opcoes);
   ligarEntradaInterativa(api.memfs);
   await api.ready;
+  api.memfs.addFile('include/omp.h', OMP_UMA_THREAD);
   avisar('estado', 'compilador pronto');
   return api;
 }
@@ -180,7 +210,57 @@ const ARGS_CLANG = [
   '-fmessage-length', '0',        // não quebra a mensagem em 80 colunas
   '-fno-color-diagnostics',       // sem códigos de cor, para dar para traduzir
   '-Wall', '-Wextra',
+  // Sem -fopenmp (não há threads aqui) o Clang reclama de cada #pragma omp.
+  // O aviso único, explicando isso, vem de revisarFonte (traduzir.js).
+  '-Wno-source-uses-openmp',
 ];
+
+/* OpenMP no navegador.
+ *
+ * O WebAssembly desta página não tem threads, então não dá para ligar o
+ * -fopenmp como no programa de computador. Para os exercícios de
+ * Programação Paralela ainda rodarem, este omp.h responde como um OpenMP
+ * com UMA thread: os #pragma omp são ignorados, omp_get_thread_num() é 0,
+ * omp_get_num_threads() é 1, e omp_get_wtime() mede o tempo de verdade.
+ * _OPENMP fica sem definir, como num compilador sem OpenMP: um código com
+ * #ifdef _OPENMP segue o caminho serial que ele mesmo previu. */
+const OMP_UMA_THREAD = `#ifndef CC_OMP_UMA_THREAD_H
+#define CC_OMP_UMA_THREAD_H
+#include <time.h>
+
+typedef int omp_lock_t;
+typedef int omp_nest_lock_t;
+typedef enum omp_sched_t {
+    omp_sched_static = 1, omp_sched_dynamic = 2,
+    omp_sched_guided = 3, omp_sched_auto = 4
+} omp_sched_t;
+
+static inline int  omp_get_thread_num(void)   { return 0; }
+static inline int  omp_get_num_threads(void)  { return 1; }
+static inline int  omp_get_max_threads(void)  { return 1; }
+static inline int  omp_get_num_procs(void)    { return 1; }
+static inline int  omp_get_thread_limit(void) { return 1; }
+static inline int  omp_get_level(void)        { return 0; }
+static inline int  omp_in_parallel(void)      { return 0; }
+static inline void omp_set_num_threads(int n) { (void)n; }
+static inline void omp_set_dynamic(int d)     { (void)d; }
+static inline int  omp_get_dynamic(void)      { return 0; }
+static inline void omp_set_nested(int n)      { (void)n; }
+static inline int  omp_get_nested(void)       { return 0; }
+static inline void omp_set_schedule(omp_sched_t k, int c) { (void)k; (void)c; }
+static inline void omp_get_schedule(omp_sched_t *k, int *c) { *k = omp_sched_static; *c = 0; }
+
+static inline void omp_init_lock(omp_lock_t *l)    { *l = 0; }
+static inline void omp_destroy_lock(omp_lock_t *l) { *l = 0; }
+static inline void omp_set_lock(omp_lock_t *l)     { *l = 1; }
+static inline void omp_unset_lock(omp_lock_t *l)   { *l = 0; }
+static inline int  omp_test_lock(omp_lock_t *l)    { if (*l) return 0; *l = 1; return 1; }
+
+static inline double omp_get_wtime(void) { return (double)clock() / CLOCKS_PER_SEC; }
+static inline double omp_get_wtick(void) { return 1.0 / CLOCKS_PER_SEC; }
+
+#endif
+`;
 
 /* Mesmo arquivo de apoio do programa de computador (ccrun/apoio.c).
  *
@@ -189,8 +269,8 @@ const ARGS_CLANG = [
  * de entrada já ter sido mostrada, sem dizer o que o programa quer. */
 const FONTE_APOIO = `/* Arquivo de apoio, compilado junto com o exercicio.
  *
- * Nada aqui muda o codigo de quem esta aprendendo: sao dois ajustes feitos
- * por fora, no momento de compilar.
+ * Nada aqui muda o codigo de quem esta aprendendo: sao ajustes feitos
+ * por fora, no momento de compilar (o 3, rand_r, so vale no Windows).
  *
  *  1. Desliga o buffer da saida. Quando a saida de um programa em C vai para
  *     outro programa em vez de um terminal, a biblioteca guarda o texto e so
@@ -300,6 +380,22 @@ int cc_scanf_conferido(const char *formato, ...) {
     va_end(argumentos);
     return lidos;
 }
+
+/* ------------------------------------------- 3. rand_r no Windows */
+
+/* rand_r e o rand() que cada thread pode chamar com a sua propria semente,
+ * usado nos exemplos de OpenMP (Monte Carlo). Existe no Linux, nao no
+ * Windows. A declaracao vem de compat_posix.h. "weak": uma versao escrita
+ * no proprio exercicio tem preferencia. */
+#ifdef _WIN32
+#include <stdlib.h>
+
+__attribute__((weak))
+int rand_r(unsigned int *semente) {
+    *semente = *semente * 1103515245u + 12345u;
+    return (int)((*semente / 65536u) % ((unsigned int)RAND_MAX + 1u));
+}
+#endif
 `;
 
 /* O link do wasm-clang aceita um objeto só; aqui precisamos de dois. */

@@ -38,6 +38,36 @@ int main(void) {
 `,
   },
 
+  openmp: {
+    nome: 'OpenMP: aproximação de PI',
+    codigo: `/* Aproximacao de PI com OpenMP.
+   No navegador roda com 1 thread; no programa para Windows,
+   com todas as do processador (o -fopenmp e ligado sozinho). */
+#include <stdio.h>
+#include <omp.h>
+
+int main(void) {
+    const long passos = 10000000;
+    const double largura = 1.0 / (double)passos;
+    double soma = 0.0;
+
+    double inicio = omp_get_wtime();
+
+    #pragma omp parallel for reduction(+:soma)
+    for (long i = 0; i < passos; i++) {
+        double x = (i + 0.5) * largura;
+        soma += 4.0 / (1.0 + x * x);
+    }
+
+    printf("PI = %.6f\\n", soma * largura);
+    printf("threads: %d   tempo: %.3f s\\n",
+           omp_get_max_threads(), omp_get_wtime() - inicio);
+
+    return 0;
+}
+`,
+  },
+
   erro: {
     nome: 'Com erros de propósito',
     codigo: `/* Este exemplo NAO compila, de proposito.

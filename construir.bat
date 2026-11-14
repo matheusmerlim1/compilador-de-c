@@ -12,7 +12,8 @@ echo Empacotando o executavel...
 python -m PyInstaller --noconfirm --clean --onefile --windowed ^
   --name "Compilador-de-C" ^
   --icon "recursos/compilador.ico" ^
-  --add-data "ccrun/sem_buffer.c;ccrun" ^
+  --add-data "ccrun/apoio.c;ccrun" ^
+  --add-data "ccrun/compat_posix.h;ccrun" ^
   --hidden-import tkinter ^
   app.py
 if errorlevel 1 goto erro

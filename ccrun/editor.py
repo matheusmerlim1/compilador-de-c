@@ -524,6 +524,8 @@ class Editor(tk.Tk):
             text=(str(self.caminho.parent) if self.caminho else "não salvo") + marca)
 
     def _status(self, texto, cor=None):
+        # "OpenMP ligado" fica visivel enquanto durar o resultado da compilacao
+        texto += getattr(self, "_sufixo_status", "")
         self.rotulo_status.config(text=texto)
         fundo = {VERDE: "#0e7c5a", VERMELHO: "#a1260d", AMARELO: "#9a6700"}.get(cor, "#007acc")
         # a barra inteira muda de cor junto, inclusive o indicador de posicao
@@ -1098,6 +1100,7 @@ class Editor(tk.Tk):
         self.rodando = True
         self.btn_rodar.config(state=tk.DISABLED)
         self.codigo.tag_remove("linha_erro", "1.0", tk.END)
+        self._sufixo_status = ""
         self._status("compilando...", None)
         self._escrever(self.saida, [("compilando...\n", "fraco")])
         t = threading.Thread(
@@ -1171,6 +1174,9 @@ class Editor(tk.Tk):
             return
 
         self._mostrar_diagnosticos(comp, fonte)
+
+        if comp.sucesso and comp.openmp:
+            self._sufixo_status = "   ·   OpenMP ligado (%d núcleos)" % (os.cpu_count() or 1)
 
         if not comp.sucesso:
             erros, _ = diagnosticos.contar(comp.diags)

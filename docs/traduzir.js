@@ -261,6 +261,22 @@ function revisarFonte(codigo) {
   const emLaco = linhasEmLaco(linhas);
 
   const achados = [];
+
+  // OpenMP: aqui não há threads (ver OMP_UMA_THREAD em worker-c.js). Um aviso
+  // só, na primeira linha que usa OpenMP, para o resultado não enganar.
+  const linhaOmp = linhas.findIndex((l) =>
+    /^\s*#\s*(?:pragma\s+omp\b|include\s*<omp\.h>)/.test(l) || /\bomp_[a-z_]+\s*\(/.test(l.split('//')[0]));
+  if (linhaOmp >= 0) {
+    achados.push({
+      nivel: 'warning', linha: linhaOmp + 1, coluna: 0, notas: [],
+      mensagem: 'OpenMP no navegador roda com 1 thread',
+      traducao: 'Este programa usa OpenMP. No navegador ele roda com UMA thread: ' +
+                'os #pragma omp são ignorados, omp_get_thread_num() dá 0 e ' +
+                'omp_get_num_threads() dá 1. O resultado sai igual ao da versão serial.',
+      dica: 'Para ver as threads trabalhando e medir o ganho de tempo, rode no ' +
+            'programa para Windows: ele liga o -fopenmp sozinho, como nos Makefiles da disciplina.',
+    });
+  }
   linhas.forEach((linhaCrua, i) => {
     const linha = linhaCrua.split('//')[0];
 

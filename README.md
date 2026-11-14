@@ -53,6 +53,7 @@ Diferenças em relação ao programa para Windows:
 | Entrada do `scanf` | preenchida antes de rodar | digitada durante a execução |
 | Casos de teste (F6) | não | sim |
 | Abrir `.c` do computador | não | sim, e pelo *Abrir com* |
+| OpenMP (`#pragma omp`) | roda com 1 thread | todas as threads do processador |
 
 ---
 
@@ -161,10 +162,8 @@ A forma certa de tratar:
 
 ```c
 if (scanf("%d", &n) != 1) {
-    while (getchar() != '
-');   /* limpa a entrada */
-    printf("Isso nao e um numero.
-");
+    while (getchar() != '\n');   /* limpa a entrada */
+    printf("Isso nao e um numero.\n");
 }
 ```
 
@@ -178,6 +177,44 @@ if (scanf("%d", &n) != 1) {
 **Terminal (Shift+F5)** faz o mesmo numa janela preta separada do Windows.
 Se deixar essa janela aberta e apertar F5, a compilação falha — o Windows trava
 o `.exe` enquanto ele roda. A ferramenta detecta e avisa para fechar a janela.
+
+---
+
+## OpenMP (Programação Paralela)
+
+Os exercícios de OpenMP da disciplina rodam sem configurar nada. Se o código
+tem `#pragma omp`, `#include <omp.h>` ou chama alguma função `omp_…()`, a
+ferramenta compila com **`-fopenmp`**, igual aos Makefiles das aulas
+(`gcc … -fopenmp`), e a barra de baixo mostra **OpenMP ligado (N núcleos)**.
+
+```c
+#include <stdio.h>
+#include <omp.h>
+
+int main(void) {
+    #pragma omp parallel
+    printf("Eu sou a thread %d de %d\n",
+           omp_get_thread_num(), omp_get_num_threads());
+    return 0;
+}
+```
+
+- **`rand_r` no Windows.** Os exemplos de Monte Carlo usam `rand_r`, que existe
+  no Linux e não no Windows. A ferramenta fornece um `rand_r` (declarado em
+  [`ccrun/compat_posix.h`](ccrun/compat_posix.h), corpo em `apoio.c`), então
+  esses exercícios compilam como no laboratório. Se o seu código tiver um
+  `rand_r` próprio, vale o seu.
+- **Erros explicados.** Função `omp_…` sem `#include <omp.h>`, `#pragma omp`
+  ignorado e compilador sem a biblioteca do OpenMP (`libgomp`) aparecem
+  traduzidos, com o que fazer. O GCC do WinLibs, que o instalador sugere, já
+  traz o OpenMP.
+- **Opções de `-D` dos Makefiles** (como `-DPI_CORRETO`) ainda não têm botão:
+  escreva `#define PI_CORRETO` no topo do arquivo.
+- **No navegador** não há threads. A página usa um `omp.h` que se comporta como
+  OpenMP com **uma** thread (`omp_get_thread_num()` dá 0,
+  `omp_get_num_threads()` dá 1, `omp_get_wtime()` mede o tempo de verdade) e
+  avisa isso ao compilar. O resultado sai igual ao da versão serial; para ver o
+  ganho de tempo, use o programa para Windows.
 
 ---
 
@@ -282,7 +319,7 @@ O `tudo` dá um panorama rápido:
 
 ## Exercícios de exemplo
 
-A pasta `exercicios/` traz quatro casos, de propósito:
+A pasta `exercicios/` traz estes casos, de propósito:
 
 | Arquivo | Estado |
 |---|---|
@@ -290,6 +327,7 @@ A pasta `exercicios/` traz quatro casos, de propósito:
 | `02_media.c` | **não compila** — falta `;` e falta `&` no `scanf` |
 | `03_vetor.c` | compila mas **quebra na execução** — escreve fora do vetor |
 | `04_raiz.c` | correto, usa `math.h` |
+| `05_openmp_pi.c` | correto, aproxima PI com `#pragma omp parallel for reduction` |
 | `Fibonnaci.c` | exercício real de aula: soma os pares de Fibonacci, com 3 casos de teste |
 
 ---

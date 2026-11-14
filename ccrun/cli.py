@@ -86,6 +86,8 @@ def _compilar_fonte(fonte, comp, args, silencioso=False):
 
         if res.sucesso:
             resumo = cores.ok("compilou")
+            if res.openmp:
+                resumo += cores.fraco("  (OpenMP ligado: -fopenmp)")
             if avisos:
                 resumo += cores.aviso("  (%d aviso%s)" % (avisos, "s" if avisos > 1 else ""))
             print("   " + resumo)
