@@ -6,6 +6,7 @@ traduz os erros continua sendo o ccrun.
 import os
 import queue
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -58,6 +59,7 @@ class Editor(tk.Tk):
 
         self.caminho = None          # arquivo .c aberto, se houver
         self.salvo = True
+        self.juntados = []           # outros .c escolhidos em Juntar arquivos
         self.compilador = toolchain.detectar()
         self.fila = queue.Queue()        # resultados da thread de compilacao
         self.fila_saida = queue.Queue()  # texto que o programa vai imprimindo
@@ -173,6 +175,10 @@ class Editor(tk.Tk):
         botao("Novo", self.novo)
         botao("Abrir", self.abrir)
         botao("Salvar   (Ctrl+S)", self.salvar)
+        botao("Salvar como", self.salvar_como)
+        tk.Frame(barra, bg="#3c3c3c", width=1, height=26).pack(
+            side=tk.LEFT, padx=8, pady=4)
+        self.btn_juntar = botao("Juntar arquivos", self.juntar_arquivos)
 
         self.rotulo_arquivo = tk.Label(barra, text="", bg=FUNDO, fg=CINZA,
                                        font=self.fonte_ui)
@@ -322,6 +328,56 @@ class Editor(tk.Tk):
                                    fg="white", font=self.fonte_ui, padx=10)
         self.rotulo_pos.pack(side=tk.RIGHT)
 
+        # Para quem deixa a janela aberta por dias: procura versao nova na hora.
+        from . import atualizador
+        self.rotulo_versao = tk.Label(
+            barra, text="versão %s · procurar atualização" % atualizador.descricao_versao(),
+            bg="#007acc", fg="white", font=self.fonte_ui, padx=10, cursor="hand2")
+        self.rotulo_versao.pack(side=tk.RIGHT)
+        self.rotulo_versao.bind("<Button-1>", lambda e: self.procurar_atualizacao())
+
+    def procurar_atualizacao(self):
+        """Procura e instala a versao nova sem fechar a janela; pergunta antes de reabrir."""
+        from . import atualizador
+
+        if getattr(self, "_procurando", False):
+            return
+        self._procurando = True
+        self._status("procurando versão nova no GitHub...", None)
+        resultado = {}
+
+        def trabalho():
+            resultado["r"] = atualizador.procurar_e_aplicar()
+
+        def conferir():
+            if "r" not in resultado:
+                self.after(200, conferir)
+                return
+            self._procurando = False
+            atualizou, msg = resultado["r"]
+            if not atualizou:
+                self._status(msg, None)
+                return
+            self._status("versão nova instalada", VERDE)
+            aviso = "A versão nova já foi instalada. Reabrir o programa agora?"
+            if not self.salvo:
+                aviso += "\n\nO código desta janela ainda não foi salvo: salve antes."
+            if messagebox.askyesno("Compilador de C", aviso, parent=self):
+                if not self.salvo:
+                    self.salvar()
+                    if not self.salvo:
+                        return
+                try:
+                    atualizador.reabrir(list(sys.argv))
+                except OSError as e:
+                    messagebox.showerror("Compilador de C", "Não consegui reabrir: %s" % e,
+                                         parent=self)
+                    return
+                self.destroy()
+
+        threading.Thread(target=trabalho, daemon=True).start()
+        self.after(200, conferir)
+
     def _atalhos(self):
         self.bind("<F5>", lambda e: self.rodar())
         self.bind("<Shift-F5>", lambda e: self.rodar_terminal())
@@ -329,6 +385,7 @@ class Editor(tk.Tk):
         self.bind("<F6>", lambda e: self.testar())
         self.bind("<F7>", lambda e: self.verificar())
         self.bind("<Control-s>", lambda e: (self.salvar(), "break")[1])
+        self.bind("<Control-S>", lambda e: (self.salvar_como(), "break")[1])  # Ctrl+Shift+S
         self.bind("<Control-o>", lambda e: (self.abrir(), "break")[1])
         self.bind("<Control-n>", lambda e: (self.novo(), "break")[1])
 
@@ -532,6 +589,8 @@ class Editor(tk.Tk):
         self.rotulo_status.master.config(bg=fundo)
         self.rotulo_status.config(bg=fundo)
         self.rotulo_pos.config(bg=fundo)
+        if hasattr(self, "rotulo_versao"):
+            self.rotulo_versao.config(bg=fundo)
 
     # ------------------------------------------------------------------
     # escrita nos paineis
@@ -558,6 +617,8 @@ class Editor(tk.Tk):
         self.codigo.mark_set("insert", "5.4")
         self.caminho = None
         self.salvo = True
+        self.juntados = []
+        self._atualizar_juntar()
         self._pintar()
         self._numerar()
         self._atualizar_titulo()
@@ -584,8 +645,11 @@ class Editor(tk.Tk):
             return
         self.codigo.delete("1.0", tk.END)
         self.codigo.insert("1.0", conteudo)
+        if self.caminho is None or Path(caminho).resolve().parent != self.caminho.resolve().parent:
+            self.juntados = []       # outra pasta, outro programa
         self.caminho = caminho
         self.salvo = True
+        self._atualizar_juntar()
         self._pintar()
         self._numerar()
         self._atualizar_titulo()
@@ -593,14 +657,28 @@ class Editor(tk.Tk):
 
     def salvar(self):
         if self.caminho is None:
-            escolha = filedialog.asksaveasfilename(
-                title="Salvar como", defaultextension=".c",
-                filetypes=[("Arquivos em C", "*.c")],
-                initialfile="exercicio.c",
-            )
-            if not escolha:
-                return False
-            self.caminho = Path(escolha)
+            return self.salvar_como()
+        return self._gravar()
+
+    def salvar_como(self):
+        """Grava com outro nome (ou em outra pasta). Dai em diante o editor
+        trabalha no arquivo novo; o original fica como estava no disco."""
+        escolha = filedialog.asksaveasfilename(
+            title="Salvar como", defaultextension=".c",
+            filetypes=[("Arquivos em C", "*.c"), ("Cabeçalhos", "*.h"), ("Todos", "*.*")],
+            initialdir=str(self.caminho.parent) if self.caminho else None,
+            initialfile=self.caminho.name if self.caminho else "exercicio.c",
+        )
+        if not escolha:
+            return False
+        anterior = self.caminho
+        self.caminho = Path(escolha)
+        if not self._gravar():
+            self.caminho = anterior
+            return False
+        return True
+
+    def _gravar(self):
         try:
             self.caminho.write_text(self.codigo.get("1.0", "end-1c"), encoding="utf-8")
         except OSError as e:
@@ -608,8 +686,127 @@ class Editor(tk.Tk):
             return False
         self.salvo = True
         self._atualizar_titulo()
+        self._atualizar_juntar()        # um #include "x.h" novo pode ter trazido x.c
         self._status("salvo: " + self.caminho.name, VERDE)
         return True
+
+    # ------------------------------------------------------------------
+    # varios arquivos compilados juntos
+    # ------------------------------------------------------------------
+
+    def _fontes_do_projeto(self, fonte):
+        """O arquivo aberto e os .c que vao junto: os achados pelo #include
+        "x.h" (com x.c ao lado) e os escolhidos em Juntar arquivos."""
+        if self.caminho is None:
+            return [fonte]
+        fontes = [fonte]
+        vistos = {Path(fonte).resolve()}
+        for extra in mod_compilar.arquivos_relacionados(fonte) + list(self.juntados):
+            extra = Path(extra).resolve()
+            if extra not in vistos and extra.is_file():
+                vistos.add(extra)
+                fontes.append(extra)
+        return fontes
+
+    def _atualizar_juntar(self):
+        if not hasattr(self, "btn_juntar"):
+            return
+        n = len(self._fontes_do_projeto(self.caminho)) - 1 if self.caminho else 0
+        self.btn_juntar.config(
+            text="Juntar arquivos (%d)" % n if n else "Juntar arquivos")
+
+    def _nome_relativo(self, caminho):
+        try:
+            return os.path.relpath(caminho, self.caminho.parent)
+        except ValueError:            # outro disco
+            return str(caminho)
+
+    def juntar_arquivos(self):
+        """Janela para escolher outros .c que entram na mesma compilacao."""
+        if self.caminho is None:
+            messagebox.showinfo(
+                "Juntar arquivos",
+                "Salve este arquivo primeiro: os outros arquivos ficam "
+                "guardados em relação à pasta dele.", parent=self)
+            if not self.salvar():
+                return
+
+        jan = tk.Toplevel(self)
+        jan.title("Arquivos compilados juntos")
+        jan.configure(bg=FUNDO)
+        jan.transient(self)
+        jan.resizable(False, False)
+
+        tk.Label(jan, bg=FUNDO, fg=TEXTO, font=self.fonte_ui, justify="left",
+                 wraplength=520, text=(
+                     "Todos os arquivos desta lista são compilados juntos, num "
+                     "programa só (como um projeto do Code::Blocks). Só UM deles "
+                     "pode ter a função main.\n\n"
+                     "Os marcados como automático entram sozinhos: o código tem "
+                     "#include \"x.h\" e existe um x.c ao lado do x.h.")
+                 ).pack(anchor="w", padx=16, pady=(14, 8))
+
+        lista = tk.Listbox(jan, width=70, height=9, bg=FUNDO_CLARO, fg=TEXTO,
+                           selectbackground="#0e639c", relief=tk.FLAT,
+                           font=self.fonte_ui, activestyle="none")
+        lista.pack(padx=16, fill=tk.X)
+
+        auto = []
+
+        def recarregar():
+            auto[:] = mod_compilar.arquivos_relacionados(self.caminho)
+            lista.delete(0, tk.END)
+            lista.insert(tk.END, self.caminho.name + "      (este arquivo)")
+            for p in auto:
+                lista.insert(tk.END, self._nome_relativo(p) + "      (automático, pelo #include)")
+            for p in self.juntados:
+                lista.insert(tk.END, self._nome_relativo(p))
+            self._atualizar_juntar()
+
+        def adicionar():
+            escolhas = filedialog.askopenfilenames(
+                parent=jan, title="Escolher arquivos .c para compilar junto",
+                filetypes=[("Arquivos em C", "*.c")],
+                initialdir=str(self.caminho.parent))
+            ja = {Path(p).resolve() for p in [self.caminho, *auto, *self.juntados]}
+            for e in escolhas:
+                p = Path(e).resolve()
+                if p not in ja:
+                    self.juntados.append(p)
+                    ja.add(p)
+            recarregar()
+
+        def remover():
+            sel = lista.curselection()
+            if not sel:
+                return
+            i = sel[0]
+            if i == 0:
+                messagebox.showinfo("Juntar arquivos",
+                                    "Este é o arquivo aberto no editor.", parent=jan)
+            elif i <= len(auto):
+                messagebox.showinfo(
+                    "Juntar arquivos",
+                    "Este entra sozinho por causa do #include \"...h\" no código. "
+                    "Para tirá-lo, tire o #include.", parent=jan)
+            else:
+                del self.juntados[i - 1 - len(auto)]
+                recarregar()
+
+        botoes = tk.Frame(jan, bg=FUNDO)
+        botoes.pack(fill=tk.X, padx=16, pady=14)
+        for texto, cmd in (("Adicionar .c…", adicionar), ("Remover", remover)):
+            tk.Button(botoes, text=texto, command=cmd, bg=FUNDO_CLARO, fg=TEXTO,
+                      activebackground="#333337", activeforeground="white",
+                      relief=tk.FLAT, padx=14, pady=6, font=self.fonte_ui,
+                      cursor="hand2").pack(side=tk.LEFT, padx=(0, 6))
+        tk.Button(botoes, text="Fechar", command=jan.destroy, bg="#0e639c", fg="white",
+                  activebackground="#1177bb", activeforeground="white",
+                  relief=tk.FLAT, padx=18, pady=6, font=self.fonte_ui,
+                  cursor="hand2").pack(side=tk.RIGHT)
+        jan.bind("<Escape>", lambda e: jan.destroy())
+        recarregar()
+        jan.grab_set()
 
     def _confirmar_descarte(self):
         if self.salvo:
@@ -1103,6 +1300,11 @@ class Editor(tk.Tk):
         self._sufixo_status = ""
         self._status("compilando...", None)
         self._escrever(self.saida, [("compilando...\n", "fraco")])
+        self._fontes = self._fontes_do_projeto(fonte)
+        if len(self._fontes) > 1:
+            self._escrever(self.saida, [(
+                "compilando junto: " + ", ".join(p.name for p in self._fontes) + "\n",
+                "fraco")])
         t = threading.Thread(
             target=self._trabalhar,
             args=(modo, fonte, entrada, casos, origem),
@@ -1114,7 +1316,7 @@ class Editor(tk.Tk):
         try:
             destino = mod_compilar.caminho_saida(fonte, fonte.parent / "build")
             comp = mod_compilar.compilar(
-                self.compilador, [fonte], destino,
+                self.compilador, getattr(self, "_fontes", None) or [fonte], destino,
                 # o apoio (sem buffer + conferencia do scanf) vale sempre
                 apoio=True)
             if not comp.sucesso or modo == "verificar":
@@ -1238,18 +1440,36 @@ class Editor(tk.Tk):
             self._escrever(self.erros, [("Nenhum erro nem aviso.\n", "dica")])
             return
 
+        def outro_arquivo(d):
+            """Com varios arquivos juntos, o erro pode ser de um que nao esta no editor."""
+            return bool(d.arquivo) and Path(d.arquivo).name != Path(fonte).name
+
+        def linha_de(d):
+            if not outro_arquivo(d):
+                return self.codigo.get("%d.0" % d.linha, "%d.end" % d.linha)
+            caminho = Path(d.arquivo)
+            if not caminho.is_absolute():
+                caminho = Path(fonte).parent / caminho
+            try:
+                linhas = caminho.read_text(encoding="utf-8", errors="replace").splitlines()
+                return linhas[d.linha - 1]
+            except (OSError, IndexError):
+                return ""
+
         partes = []
         for d in comp.diags:
             eh_erro = d.e_erro
             tag = "erro" if eh_erro else "aviso"
             rotulo = "ERRO" if eh_erro else "AVISO"
             local = ("linha %d" % d.linha) if d.linha else "ligação"
+            if d.linha and outro_arquivo(d):
+                local = Path(d.arquivo).name + ", " + local
             partes.append((rotulo + "  " + local + "\n", tag))
             partes.append(("   " + (d.traducao or d.mensagem) + "\n",))
             if d.traducao:
                 partes.append(("   original: " + d.mensagem + "\n", "fraco"))
             if d.linha:
-                trecho = self.codigo.get("%d.0" % d.linha, "%d.end" % d.linha)
+                trecho = linha_de(d)
                 if trecho.strip():
                     partes.append(("   %d | %s\n" % (d.linha, trecho.strip()), "codigo"))
             if d.dica:
@@ -1261,7 +1481,7 @@ class Editor(tk.Tk):
         # pinta no editor as linhas com erro e leva o cursor para a primeira
         primeira = None
         for d in comp.diags:
-            if d.linha:
+            if d.linha and not outro_arquivo(d):
                 self.codigo.tag_add("linha_erro",
                                     "%d.0" % d.linha, "%d.end+1c" % d.linha)
                 if primeira is None and d.e_erro:

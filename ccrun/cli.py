@@ -9,7 +9,7 @@ from pathlib import Path
 from . import compilar as mod_compilar
 from . import cores, diagnosticos, executar, testes, toolchain
 
-VERSAO = "1.0"
+from .versao import VERSAO
 PASTA_BUILD = "build"
 
 
@@ -65,8 +65,12 @@ def _compilar_fonte(fonte, comp, args, silencioso=False):
     """Compila e imprime o relatorio. Devolve o ResultadoCompilacao."""
     fonte = Path(fonte).resolve()
     destino = mod_compilar.caminho_saida(fonte, _pasta_build(fonte))
+    # #include "lista.h" com lista.c ao lado: compila junto, como um projeto
+    juntos = mod_compilar.arquivos_relacionados(fonte)
+    if juntos and not silencioso:
+        print(cores.fraco("   compilando junto: " + ", ".join(p.name for p in juntos)))
     res = mod_compilar.compilar(
-        comp, [fonte], destino,
+        comp, [fonte] + juntos, destino,
         otimizar=getattr(args, "otimizar", False),
         sanitizar=getattr(args, "sanitizar", False),
     )
@@ -440,6 +444,13 @@ def cmd_editor(args):
         return 3
 
     try:
+        from . import atualizador
+        if atualizador.ao_abrir():
+            return 0          # reabriu com a versao nova
+    except Exception:
+        pass
+
+    try:
         abrir_editor(args.alvo)
     except Exception:
         # Rodando com pythonw nao existe terminal para mostrar o erro: sem isto
@@ -609,7 +620,10 @@ def main(argv=None):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
     parser = construir_parser()
-    args = parser.parse_args(argv)
+    # Ao reabrir depois de uma atualizacao, o programa recebe marcas internas
+    # (--sem-atualizar, --aguardar-pid N) que o argparse nao conhece.
+    from .atualizador import separar_marcas
+    args = parser.parse_args(separar_marcas(sys.argv[1:] if argv is None else list(argv))[0])
     cores.configurar(getattr(args, "sem_cor", False))
 
     if not getattr(args, "comando", None):

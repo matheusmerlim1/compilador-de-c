@@ -18,6 +18,9 @@ _LINHA_MSVC = re.compile(
 )
 # undefined reference to `funcao'   (erro de ligacao, sem numero de linha)
 _LINK = re.compile(r"undefined reference to [`'\"](?P<simbolo>[^`'\"]+)['\"]")
+# ld: "...b.o:b.c:(.text+0x0): multiple definition of `main'; a.o:a.c:... first defined here"
+_DUPLICADO = re.compile(r"(?:(?P<arquivo>[\w.-]+\.c):)?[^:]*:?\s*multiple definition of "
+                        r"[`'\"](?P<simbolo>[^`'\"]+)['\"]")
 
 NIVEL_PT = {
     "error": "ERRO",
@@ -379,6 +382,27 @@ def analisar_saida(saida, familia="gcc"):
             _dica_include(d)
             _dica_cabecalho(d)
             diags.append(d)
+            continue
+
+        md = _DUPLICADO.search(linha)
+        if md:
+            simbolo = md.group("simbolo").lstrip("_").split("@")[0]
+            arquivo = md.group("arquivo") or ""
+            d = Diagnostico(nivel="error",
+                            mensagem="multiple definition of '" + simbolo + "'")
+            if simbolo == "main":
+                d.traducao = ("Mais de um dos arquivos juntados tem a funcao main"
+                              + (" (" + arquivo + " e outro)" if arquivo else "") + ".")
+                d.dica = ("Um programa so pode ter UM main. Deixe o main em um arquivo "
+                          "e tire o outro arquivo da lista em 'Juntar arquivos'.")
+            else:
+                d.traducao = ("'" + simbolo + "' foi definido em mais de um arquivo"
+                              + (" (" + arquivo + " e outro)" if arquivo else "") + ".")
+                d.dica = ("O corpo da funcao (ou a variavel global) deve ficar em um .c "
+                          "so; no .h fica apenas o prototipo. Se um .c inclui outro .c "
+                          "com #include, troque pelo .h correspondente.")
+            if not any(x.mensagem == d.mensagem for x in diags):
+                diags.append(d)
             continue
 
         ml = _LINK.search(linha)

@@ -105,6 +105,8 @@ Escreva o código em cima, aperte **F5**, e o resultado aparece embaixo.
 | <kbd>F7</kbd> | Verificar | só compila e lista os erros |
 | <kbd>F6</kbd> | Testar | confere a saída contra os casos de teste |
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Salvar | grava o arquivo `.c` |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Salvar como | grava com outro nome ou em outra pasta; o editor passa a trabalhar no arquivo novo e o original fica como estava |
+| | Juntar arquivos | escolhe outros `.c` para compilar junto (veja abaixo) |
 
 Quando há erro, a linha fica **marcada em vermelho no editor** e a aba *Erros*
 explica o problema em português.
@@ -177,6 +179,48 @@ if (scanf("%d", &n) != 1) {
 **Terminal (Shift+F5)** faz o mesmo numa janela preta separada do Windows.
 Se deixar essa janela aberta e apertar F5, a compilação falha — o Windows trava
 o `.exe` enquanto ele roda. A ferramenta detecta e avisa para fechar a janela.
+
+---
+
+## Vários arquivos num programa só
+
+Quando o programa é dividido em módulos (`main.c` + `lista.c` + `lista.h`),
+o **F5 compila tudo junto**, como um projeto do Code::Blocks:
+
+- **Automático:** se o código tem `#include "lista.h"` e existe um `lista.c`
+  ao lado do `lista.h`, ele entra sozinho. Vale em cadeia: se `lista.c` inclui
+  `"no.h"` e há `no.c`, ele entra também. A Saída mostra
+  `compilando junto: main.c, lista.c, no.c`.
+- **À mão:** o botão **Juntar arquivos** abre a lista do que vai junto, com
+  *Adicionar .c…* e *Remover*. O botão mostra quantos arquivos extras há.
+- Só **um** dos arquivos pode ter `main`. Se dois tiverem, o erro aparece
+  traduzido e diz qual tirar.
+- Erro dentro de outro arquivo aparece na aba *Erros* com o nome dele
+  (`lista.c, linha 6`) e a linha do código daquele arquivo.
+
+Na linha de comando (`python cc.py rodar main.c`) a parte automática vale
+igual.
+
+---
+
+## Atualização automática
+
+Toda vez que abre, o programa procura uma versão nova no GitHub (espera no
+máximo ~6 s; sem internet, abre normalmente):
+
+- **`.exe`:** compara a versão dele com o
+  [último release](https://github.com/matheusmerlim1/compilador-de-c/releases/latest).
+  Se houver mais nova, mostra *Baixando…*, troca o arquivo e reabre sozinho.
+- **Código-fonte com git:** `git pull` só por avanço rápido (`--ff-only`) e só
+  se não houver alteração local no código.
+- **Código-fonte pelo ZIP:** baixa o ZIP do ramo e copia por cima, sem tocar em
+  `exercicios/`.
+
+Na primeira abertura da versão nova aparece um card **O que mudou**, montado
+pelos títulos dos commits (`feat:` → Novidades, `fix:` → Correções). Na barra
+de baixo, *versão 1.5 · procurar atualização* procura na hora, para quem deixa
+a janela aberta por dias. Para desligar: variável de ambiente
+`CC_SEM_ATUALIZAR=1`. Falhas ficam em `%LOCALAPPDATA%\CompiladorDeC\atualizador.log`.
 
 ---
 
@@ -371,12 +415,17 @@ construir.bat
 
 O resultado sai em `dist\Compilador-de-C.exe`.
 
+Para publicar uma versão nova: suba o número em
+[`ccrun/versao.py`](ccrun/versao.py), commite, gere o `.exe` e crie o release
+com a tag igual (`gh release create v1.6 dist/Compilador-de-C.exe`). É pela tag
+do último release que os programas instalados descobrem a atualização.
+
+Testes: `python -m unittest discover -s tests`.
+
 ---
 
 ## Limitações conhecidas
 
-- Um exercício por arquivo: não há suporte a projetos com vários `.c` ligados
-  entre si.
 - `--sanitizar` (detector de erro de memória em tempo de execução) depende de
   bibliotecas que **não vêm** na maioria dos GCC para Windows. Quando faltam, a
   ferramenta avisa e compila sem elas.

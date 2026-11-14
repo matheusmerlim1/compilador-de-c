@@ -19,6 +19,14 @@ def main():
     if not getattr(sys, "frozen", False):
         sys.path.insert(0, str(_pasta_base()))
 
+    # Procura versao nova no GitHub e atualiza antes de abrir (githubGuia, secao 12).
+    try:
+        from ccrun import atualizador
+        if atualizador.ao_abrir():
+            return 0          # reabriu com a versao nova
+    except Exception:
+        pass
+
     try:
         from ccrun.editor import abrir_editor
     except Exception:

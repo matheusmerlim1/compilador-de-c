@@ -11,6 +11,12 @@ AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(AQUI))
 
 try:
+    from ccrun import atualizador
+
+    # Procura versao nova no GitHub e atualiza antes de abrir (githubGuia, secao 12).
+    if atualizador.ao_abrir():
+        sys.exit(0)
+
     from ccrun.editor import abrir_editor
 
     abrir_editor(sys.argv[1] if len(sys.argv) > 1 else None)

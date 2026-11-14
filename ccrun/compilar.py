@@ -32,6 +32,40 @@ _USA_OPENMP = re.compile(
     re.MULTILINE)
 
 
+_INCLUDE_LOCAL = re.compile(r'^[ \t]*#[ \t]*include[ \t]*"([^"]+)"', re.MULTILINE)
+
+
+def arquivos_relacionados(fonte):
+    """Os .c que acompanham os cabecalhos locais do programa, como num projeto.
+
+    #include "lista.h" com um lista.c na mesma pasta do lista.h -> lista.c entra na
+    compilacao. Segue em frente: se lista.c incluir "no.h" e houver no.c, ele entra
+    tambem. Devolve so os extras, sem o proprio fonte, na ordem em que aparecem."""
+    fonte = Path(fonte).resolve()
+    vistos = {fonte}
+    extras = []
+    fila = [fonte]
+    while fila:
+        atual = fila.pop(0)
+        try:
+            texto = atual.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for incluido in _INCLUDE_LOCAL.findall(texto):
+            cabecalho = (atual.parent / incluido).resolve()
+            if cabecalho.suffix.lower() != ".h":
+                continue
+            if cabecalho.is_file() and cabecalho not in vistos:
+                vistos.add(cabecalho)
+                fila.append(cabecalho)          # um .h pode incluir outros .h
+            par = cabecalho.with_suffix(".c")
+            if par.is_file() and par not in vistos:
+                vistos.add(par)
+                extras.append(par)
+                fila.append(par)
+    return extras
+
+
 def usa_openmp(fontes):
     """True se algum dos fontes tem #pragma omp, #include <omp.h> ou omp_*()."""
     for f in fontes:

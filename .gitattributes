@@ -8,3 +8,7 @@ docs/wasm/*.tar    binary
 *.ico              binary
 *.png              binary
 *.exe              binary
+
+# O ZIP do GitHub e o git archive trocam o $Format:%H$ pelo commit: e assim que
+# uma instalacao pelo ZIP sabe a propria versao (ccrun/atualizador.py).
+ccrun/versao.txt   export-subst
